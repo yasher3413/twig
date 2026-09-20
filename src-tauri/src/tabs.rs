@@ -13,6 +13,9 @@ use tauri::{
 /// positioned to the right of this strip so the two never overlap.
 pub const SIDEBAR_WIDTH: f64 = 240.0;
 
+/// Gap, in logical pixels, between the two panes in split view.
+const SPLIT_GAP: f64 = 1.0;
+
 /// How many tabs are allowed to stay "hot" (a live webview) at once. Opening
 /// or activating a tab beyond this count hibernates the least-recently-used
 /// hot tab. Not user-configurable yet; that'll come with the settings UI.
@@ -52,6 +55,7 @@ pub struct TabInfo {
 pub struct TabsChangedPayload {
     pub tabs: Vec<TabInfo>,
     pub active_id: Option<String>,
+    pub split_id: Option<String>,
 }
 
 struct TabEntry {
@@ -79,6 +83,8 @@ impl TabEntry {
 struct Inner {
     tabs: Vec<TabEntry>,
     active_id: Option<String>,
+    /// The tab shown side-by-side with `active_id`, if split view is on.
+    split_id: Option<String>,
     next_id: u64,
 }
 
@@ -87,6 +93,7 @@ impl Inner {
         TabsChangedPayload {
             tabs: self.tabs.iter().map(TabEntry::to_info).collect(),
             active_id: self.active_id.clone(),
+            split_id: self.split_id.clone(),
         }
     }
 }
@@ -107,23 +114,38 @@ fn tab_label(id: &str) -> String {
     format!("tab-{id}")
 }
 
-fn content_bounds<R: Runtime>(
-    window: &Window<R>,
-) -> tauri::Result<(LogicalPosition<f64>, LogicalSize<f64>)> {
+/// The window area to the right of the sidebar, available for tab content.
+fn content_area<R: Runtime>(window: &Window<R>) -> tauri::Result<LogicalSize<f64>> {
     let scale = window.scale_factor()?;
     let logical = window.inner_size()?.to_logical::<f64>(scale);
-    let width = (logical.width - SIDEBAR_WIDTH).max(0.0);
-    Ok((
-        LogicalPosition::new(SIDEBAR_WIDTH, 0.0),
-        LogicalSize::new(width, logical.height),
+    Ok(LogicalSize::new(
+        (logical.width - SIDEBAR_WIDTH).max(0.0),
+        logical.height,
     ))
 }
 
-fn reposition<R: Runtime>(webview: &Webview<R>, window: &Window<R>) -> tauri::Result<()> {
-    let (position, size) = content_bounds(window)?;
-    webview.set_position(position)?;
-    webview.set_size(size)?;
-    Ok(())
+fn content_bounds<R: Runtime>(
+    window: &Window<R>,
+) -> tauri::Result<(LogicalPosition<f64>, LogicalSize<f64>)> {
+    let area = content_area(window)?;
+    Ok((LogicalPosition::new(SIDEBAR_WIDTH, 0.0), area))
+}
+
+/// Left/right bounds for the two panes in split view.
+fn split_bounds<R: Runtime>(
+    window: &Window<R>,
+) -> tauri::Result<(
+    (LogicalPosition<f64>, LogicalSize<f64>),
+    (LogicalPosition<f64>, LogicalSize<f64>),
+)> {
+    let area = content_area(window)?;
+    let half = ((area.width - SPLIT_GAP) / 2.0).max(0.0);
+    let left = (LogicalPosition::new(SIDEBAR_WIDTH, 0.0), LogicalSize::new(half, area.height));
+    let right = (
+        LogicalPosition::new(SIDEBAR_WIDTH + half + SPLIT_GAP, 0.0),
+        LogicalSize::new(half, area.height),
+    );
+    Ok((left, right))
 }
 
 /// Creates the webview backing a tab. If `scroll_y` is non-zero, injects a
@@ -145,20 +167,53 @@ fn spawn_webview<R: Runtime>(
     window.add_child(builder, position, size)
 }
 
-fn show_tab<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, label: &str) -> tauri::Result<()> {
-    if let Some(webview) = app.get_webview(label) {
-        reposition(&webview, window)?;
-        webview.show()?;
-        webview.set_focus()?;
-    }
-    Ok(())
-}
-
 fn hide_tab<R: Runtime>(app: &AppHandle<R>, label: &str) -> tauri::Result<()> {
     if let Some(webview) = app.get_webview(label) {
         webview.hide()?;
     }
     Ok(())
+}
+
+fn place<R: Runtime>(app: &AppHandle<R>, id: &str, bounds: (LogicalPosition<f64>, LogicalSize<f64>)) {
+    if let Some(webview) = app.get_webview(&tab_label(id)) {
+        let _ = webview.set_position(bounds.0);
+        let _ = webview.set_size(bounds.1);
+        let _ = webview.show();
+    }
+}
+
+/// Single source of truth for what's on screen: positions and shows
+/// `active_id` (and `split_id`, side by side, if set). Anything being
+/// replaced needs to be hidden by the caller first - this only handles what
+/// *should* now be visible.
+fn sync_visible_webviews<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, inner: &Inner) {
+    match &inner.split_id {
+        Some(split_id) => {
+            let Ok((left, right)) = split_bounds(window) else {
+                return;
+            };
+            if let Some(active) = &inner.active_id {
+                place(app, active, left);
+            }
+            place(app, split_id, right);
+        }
+        None => {
+            let Ok(bounds) = content_bounds(window) else {
+                return;
+            };
+            if let Some(active) = &inner.active_id {
+                place(app, active, bounds);
+            }
+        }
+    }
+}
+
+fn focus_active<R: Runtime>(app: &AppHandle<R>, inner: &Inner) {
+    if let Some(id) = &inner.active_id {
+        if let Some(webview) = app.get_webview(&tab_label(id)) {
+            let _ = webview.set_focus();
+        }
+    }
 }
 
 /// Best-effort scroll position read, used right before tearing a webview
@@ -193,14 +248,10 @@ fn hibernate<R: Runtime>(app: &AppHandle<R>, entry: &mut TabEntry) {
     entry.status = TabStatus::Hibernated;
 }
 
-/// Makes sure a tab has a live webview (recreating it if it was hibernated),
-/// shows it, and marks it as just-viewed.
-fn wake_and_show<R: Runtime>(
-    app: &AppHandle<R>,
-    window: &Window<R>,
-    inner: &mut Inner,
-    id: &str,
-) -> Result<(), String> {
+/// Makes sure a tab has a live webview (recreating it if it was hibernated)
+/// and marks it as just-viewed. Doesn't touch position or visibility -
+/// callers are expected to follow up with `sync_visible_webviews`.
+fn wake<R: Runtime>(window: &Window<R>, inner: &mut Inner, id: &str) -> Result<(), String> {
     let entry = inner
         .tabs
         .iter_mut()
@@ -214,13 +265,12 @@ fn wake_and_show<R: Runtime>(
     }
     entry.status = TabStatus::Hot;
     entry.last_active_at = Instant::now();
-
-    show_tab(app, window, &tab_label(id)).map_err(|e| e.to_string())
+    Ok(())
 }
 
 /// Hibernates hot tabs beyond `MAX_HOT_TABS`, oldest-viewed first, always
-/// keeping `keep_id` (the tab that was just made active) alive.
-fn enforce_hot_cap<R: Runtime>(app: &AppHandle<R>, inner: &mut Inner, keep_id: &str) {
+/// keeping `keep_ids` (the tab(s) currently on screen) alive.
+fn enforce_hot_cap<R: Runtime>(app: &AppHandle<R>, inner: &mut Inner, keep_ids: &[String]) {
     loop {
         let hot_count = inner.tabs.iter().filter(|t| t.status == TabStatus::Hot).count();
         if hot_count <= MAX_HOT_TABS {
@@ -229,7 +279,7 @@ fn enforce_hot_cap<R: Runtime>(app: &AppHandle<R>, inner: &mut Inner, keep_id: &
         let oldest = inner
             .tabs
             .iter()
-            .filter(|t| t.status == TabStatus::Hot && t.id != keep_id)
+            .filter(|t| t.status == TabStatus::Hot && !keep_ids.iter().any(|k| k == &t.id))
             .min_by_key(|t| t.last_active_at)
             .map(|t| t.id.clone());
         let Some(oldest_id) = oldest else {
@@ -239,6 +289,15 @@ fn enforce_hot_cap<R: Runtime>(app: &AppHandle<R>, inner: &mut Inner, keep_id: &
             hibernate(app, entry);
         }
     }
+}
+
+fn visible_ids(inner: &Inner) -> Vec<String> {
+    inner
+        .active_id
+        .iter()
+        .chain(inner.split_id.iter())
+        .cloned()
+        .collect()
 }
 
 fn emit_tabs_changed<R: Runtime>(app: &AppHandle<R>, inner: &Inner) {
@@ -267,8 +326,12 @@ pub fn create_tab<R: Runtime>(
 
     spawn_webview(&window, &label, parsed, 0.0).map_err(|e| e.to_string())?;
 
+    // A new tab always takes over as the sole view - drop any split.
     if let Some(active) = &inner.active_id {
         hide_tab(&app, &tab_label(active)).map_err(|e| e.to_string())?;
+    }
+    if let Some(split) = inner.split_id.take() {
+        hide_tab(&app, &tab_label(&split)).map_err(|e| e.to_string())?;
     }
 
     inner.tabs.push(TabEntry {
@@ -280,7 +343,7 @@ pub fn create_tab<R: Runtime>(
         scroll_y: 0.0,
     });
     inner.active_id = Some(id.clone());
-    enforce_hot_cap(&app, &mut inner, &id);
+    enforce_hot_cap(&app, &mut inner, &[id.clone()]);
 
     let info = inner
         .tabs
@@ -289,6 +352,8 @@ pub fn create_tab<R: Runtime>(
         .map(TabEntry::to_info)
         .expect("tab was just inserted");
 
+    sync_visible_webviews(&app, &window, &inner);
+    focus_active(&app, &inner);
     emit_tabs_changed(&app, &inner);
     Ok(info)
 }
@@ -302,20 +367,29 @@ pub fn activate_tab<R: Runtime>(
     let window = main_window(&app)?;
     let mut inner = manager.0.lock().unwrap();
 
-    if inner.active_id.as_deref() == Some(id.as_str()) {
+    if inner.active_id.as_deref() == Some(id.as_str()) && inner.split_id.is_none() {
         return Ok(());
     }
     if !inner.tabs.iter().any(|t| t.id == id) {
         return Err(format!("no such tab: {id}"));
     }
 
+    // Switching tabs normally always drops back to a single, full view.
     if let Some(prev) = inner.active_id.clone() {
-        hide_tab(&app, &tab_label(&prev)).map_err(|e| e.to_string())?;
+        if prev != id {
+            hide_tab(&app, &tab_label(&prev)).map_err(|e| e.to_string())?;
+        }
     }
-    wake_and_show(&app, &window, &mut inner, &id)?;
-    inner.active_id = Some(id.clone());
-    enforce_hot_cap(&app, &mut inner, &id);
+    if let Some(prev_split) = inner.split_id.take() {
+        hide_tab(&app, &tab_label(&prev_split)).map_err(|e| e.to_string())?;
+    }
 
+    wake(&window, &mut inner, &id)?;
+    inner.active_id = Some(id.clone());
+    enforce_hot_cap(&app, &mut inner, &[id]);
+
+    sync_visible_webviews(&app, &window, &inner);
+    focus_active(&app, &inner);
     emit_tabs_changed(&app, &inner);
     Ok(())
 }
@@ -340,22 +414,33 @@ pub fn close_tab<R: Runtime>(
     }
     inner.tabs.remove(index);
 
-    if inner.active_id.as_deref() == Some(id.as_str()) {
-        let next_id = inner
-            .tabs
-            .get(index)
-            .or_else(|| index.checked_sub(1).and_then(|i| inner.tabs.get(i)))
-            .map(|t| t.id.clone());
-        inner.active_id = next_id.clone();
-        if let Some(next_id) = &next_id {
-            wake_and_show(&app, &window, &mut inner, next_id)?;
+    if inner.split_id.as_deref() == Some(id.as_str()) {
+        // The split pane's tab was closed - fall back to a single view.
+        inner.split_id = None;
+    } else if inner.active_id.as_deref() == Some(id.as_str()) {
+        // The active tab was closed. If it had a split partner, promote that
+        // tab to active instead of guessing at a neighbor.
+        if let Some(promoted) = inner.split_id.take() {
+            wake(&window, &mut inner, &promoted)?;
+            inner.active_id = Some(promoted);
+        } else {
+            let next_id = inner
+                .tabs
+                .get(index)
+                .or_else(|| index.checked_sub(1).and_then(|i| inner.tabs.get(i)))
+                .map(|t| t.id.clone());
+            inner.active_id = next_id.clone();
+            if let Some(next_id) = &next_id {
+                wake(&window, &mut inner, next_id)?;
+            }
         }
     }
 
-    if let Some(active) = inner.active_id.clone() {
-        enforce_hot_cap(&app, &mut inner, &active);
-    }
+    let keep = visible_ids(&inner);
+    enforce_hot_cap(&app, &mut inner, &keep);
 
+    sync_visible_webviews(&app, &window, &inner);
+    focus_active(&app, &inner);
     emit_tabs_changed(&app, &inner);
     Ok(())
 }
@@ -455,20 +540,62 @@ pub fn set_overlay_active<R: Runtime>(
 ) -> Result<(), String> {
     let window = main_window(&app)?;
     let inner = manager.0.lock().unwrap();
-    let Some(active_id) = inner.active_id.clone() else {
-        return Ok(());
-    };
-    let label = tab_label(&active_id);
     if open {
-        hide_tab(&app, &label).map_err(|e| e.to_string())
+        for id in visible_ids(&inner) {
+            hide_tab(&app, &tab_label(&id)).map_err(|e| e.to_string())?;
+        }
+        Ok(())
     } else {
-        show_tab(&app, &window, &label).map_err(|e| e.to_string())
+        sync_visible_webviews(&app, &window, &inner);
+        focus_active(&app, &inner);
+        Ok(())
     }
 }
 
-/// Keeps the active tab's webview sized to fill the window whenever the
-/// window itself is resized (hidden tabs are repositioned lazily when they
-/// next become active instead).
+/// Sets (or clears, with `id: None`) the tab shown side by side with the
+/// active tab. The active tab keeps its role; this only changes its
+/// companion pane.
+#[tauri::command]
+pub fn set_split<R: Runtime>(
+    app: AppHandle<R>,
+    manager: State<'_, TabManager>,
+    id: Option<String>,
+) -> Result<(), String> {
+    let window = main_window(&app)?;
+    let mut inner = manager.0.lock().unwrap();
+
+    if let Some(target) = &id {
+        if inner.active_id.as_deref() == Some(target.as_str()) {
+            return Err("cannot split a tab with itself".to_string());
+        }
+        if !inner.tabs.iter().any(|t| &t.id == target) {
+            return Err(format!("no such tab: {target}"));
+        }
+    }
+
+    if inner.split_id != id {
+        if let Some(prev) = inner.split_id.take() {
+            hide_tab(&app, &tab_label(&prev)).map_err(|e| e.to_string())?;
+        }
+    }
+
+    if let Some(target) = &id {
+        wake(&window, &mut inner, target)?;
+    }
+    inner.split_id = id;
+
+    let keep = visible_ids(&inner);
+    enforce_hot_cap(&app, &mut inner, &keep);
+
+    sync_visible_webviews(&app, &window, &inner);
+    focus_active(&app, &inner);
+    emit_tabs_changed(&app, &inner);
+    Ok(())
+}
+
+/// Keeps the visible webview(s) sized to fill the window whenever it
+/// resizes (hidden tabs are repositioned lazily when they next become
+/// visible instead).
 pub fn watch_window_resize<R: Runtime>(app: &AppHandle<R>) {
     let Some(window) = app.get_window(MAIN_WINDOW_LABEL) else {
         return;
@@ -479,19 +606,15 @@ pub fn watch_window_resize<R: Runtime>(app: &AppHandle<R>) {
             return;
         };
         let manager = app_handle.state::<TabManager>();
-        let active = manager.0.lock().unwrap().active_id.clone();
-        let Some(active) = active else { return };
+        let inner = manager.0.lock().unwrap();
         let Some(window) = app_handle.get_window(MAIN_WINDOW_LABEL) else {
             return;
         };
-        let Some(webview) = app_handle.get_webview(&tab_label(&active)) else {
-            return;
-        };
-        let _ = reposition(&webview, &window);
+        sync_visible_webviews(&app_handle, &window, &inner);
     });
 }
 
-/// Background sweep that hibernates hot, non-active tabs once they've sat
+/// Background sweep that hibernates hot, non-visible tabs once they've sat
 /// idle longer than `HIBERNATE_AFTER`. Runs for the lifetime of the app.
 pub fn watch_idle_tabs<R: Runtime>(app: &AppHandle<R>) {
     let app_handle = app.clone();
@@ -500,14 +623,14 @@ pub fn watch_idle_tabs<R: Runtime>(app: &AppHandle<R>) {
 
         let manager = app_handle.state::<TabManager>();
         let mut inner = manager.0.lock().unwrap();
-        let active_id = inner.active_id.clone();
+        let visible = visible_ids(&inner);
         let now = Instant::now();
 
         let stale: Vec<String> = inner
             .tabs
             .iter()
             .filter(|t| t.status == TabStatus::Hot)
-            .filter(|t| Some(t.id.as_str()) != active_id.as_deref())
+            .filter(|t| !visible.contains(&t.id))
             .filter(|t| now.duration_since(t.last_active_at) > HIBERNATE_AFTER)
             .map(|t| t.id.clone())
             .collect();
