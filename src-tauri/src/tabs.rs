@@ -228,6 +228,34 @@ pub fn list_tabs(manager: State<'_, TabManager>) -> TabsChangedPayload {
     manager.0.lock().unwrap().snapshot()
 }
 
+/// Moves the tab to `to_index`, where `to_index` is expressed in terms of
+/// the list *before* the move (so `tabs.len()` means "move to the end").
+#[tauri::command]
+pub fn reorder_tab<R: Runtime>(
+    app: AppHandle<R>,
+    manager: State<'_, TabManager>,
+    id: String,
+    to_index: usize,
+) -> Result<(), String> {
+    let mut inner = manager.0.lock().unwrap();
+    let from = inner
+        .tabs
+        .iter()
+        .position(|t| t.id == id)
+        .ok_or_else(|| format!("no such tab: {id}"))?;
+
+    let entry = inner.tabs.remove(from);
+    let mut target = to_index.min(inner.tabs.len() + 1);
+    if target > from {
+        target -= 1;
+    }
+    let target = target.min(inner.tabs.len());
+    inner.tabs.insert(target, entry);
+
+    emit_tabs_changed(&app, &inner);
+    Ok(())
+}
+
 /// Keeps the active tab's webview sized to fill the window whenever the
 /// window itself is resized (hidden tabs are repositioned lazily when they
 /// next become active instead).

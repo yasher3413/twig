@@ -16,6 +16,7 @@ pub fn run() {
             tabs::activate_tab,
             tabs::close_tab,
             tabs::list_tabs,
+            tabs::reorder_tab,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

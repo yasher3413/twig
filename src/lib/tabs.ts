@@ -26,3 +26,7 @@ export function closeTab(id: string): Promise<void> {
 export function listTabs(): Promise<TabsChangedPayload> {
   return invoke("list_tabs");
 }
+
+export function reorderTab(id: string, toIndex: number): Promise<void> {
+  return invoke("reorder_tab", { id, toIndex });
+}
