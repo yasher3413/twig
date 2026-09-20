@@ -21,6 +21,10 @@ pub fn run() {
             tabs::navigate_tab,
             tabs::set_overlay_active,
             tabs::set_split,
+            tabs::create_group,
+            tabs::switch_group,
+            tabs::close_group,
+            tabs::rename_group,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
