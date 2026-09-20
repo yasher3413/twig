@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTabStore } from "../store/tabs";
 import { setOverlayActive } from "../lib/tabs";
+import {
+  addBookmark,
+  isBookmarked,
+  removeBookmark,
+  searchBookmarks,
+  searchHistory,
+  type Bookmark,
+  type HistoryEntry,
+} from "../lib/db";
 import "./CommandPalette.css";
 
 interface ResultItem {
@@ -21,7 +30,12 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
+  const [historyMatches, setHistoryMatches] = useState<HistoryEntry[]>([]);
+  const [bookmarkMatches, setBookmarkMatches] = useState<Bookmark[]>([]);
+  const [activeBookmarked, setActiveBookmarked] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const activeTab = tabs.find((t) => t.id === activeId) ?? null;
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -40,8 +54,38 @@ export function CommandPalette() {
       setQuery("");
       setSelected(0);
       requestAnimationFrame(() => inputRef.current?.focus());
+      if (activeTab) {
+        isBookmarked(activeTab.url).then(setActiveBookmarked);
+      } else {
+        setActiveBookmarked(false);
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    searchHistory(query.trim()).then((rows) => {
+      if (!cancelled) setHistoryMatches(rows);
+    });
+    searchBookmarks(query.trim()).then((rows) => {
+      if (!cancelled) setBookmarkMatches(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, query]);
+
+  async function toggleActiveBookmark() {
+    if (!activeTab) return;
+    if (activeBookmarked) {
+      await removeBookmark(activeTab.url);
+    } else {
+      await addBookmark(activeTab.url, activeTab.title);
+    }
+    setActiveBookmarked(!activeBookmarked);
+  }
 
   const results = useMemo<ResultItem[]>(() => {
     const q = query.trim().toLowerCase();
@@ -59,6 +103,24 @@ export function CommandPalette() {
       });
     }
 
+    for (const bookmark of bookmarkMatches) {
+      items.push({
+        key: `bookmark-${bookmark.id}`,
+        label: bookmark.title,
+        sublabel: bookmark.url,
+        run: () => newTab(bookmark.url),
+      });
+    }
+
+    for (const entry of historyMatches) {
+      items.push({
+        key: `history-${entry.id}`,
+        label: entry.title,
+        sublabel: entry.url,
+        run: () => newTab(entry.url),
+      });
+    }
+
     const commands: ResultItem[] = [
       { key: "cmd-new-tab", label: "New Tab", run: () => newTab() },
     ];
@@ -67,6 +129,13 @@ export function CommandPalette() {
         key: "cmd-close-tab",
         label: "Close Active Tab",
         run: () => close(activeId),
+      });
+    }
+    if (activeTab) {
+      commands.push({
+        key: "cmd-toggle-bookmark",
+        label: activeBookmarked ? "Remove Bookmark" : "Bookmark This Tab",
+        run: () => toggleActiveBookmark(),
       });
     }
     for (const cmd of commands) {
@@ -85,7 +154,8 @@ export function CommandPalette() {
     }
 
     return items;
-  }, [query, tabs, activeId, switchTo, newTab, close, navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, tabs, activeId, activeTab, activeBookmarked, historyMatches, bookmarkMatches, switchTo, newTab, close, navigate]);
 
   useEffect(() => {
     setSelected(0);

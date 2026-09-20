@@ -16,6 +16,7 @@ import {
   type Tab,
   type TabsChangedPayload,
 } from "../lib/tabs";
+import { recordVisit } from "../lib/db";
 
 interface TabStore {
   tabs: Tab[];
@@ -64,7 +65,8 @@ export const useTabStore = create<TabStore>((set, get) => {
       set({ ready: true });
     },
     async newTab(url) {
-      await createTab(url);
+      const tab = await createTab(url);
+      await recordVisit(tab.url, tab.title);
     },
     async switchTo(id) {
       await activateTab(id);
@@ -76,7 +78,8 @@ export const useTabStore = create<TabStore>((set, get) => {
       await reorderTab(id, toIndex);
     },
     async navigate(id, url) {
-      await navigateTab(id, url);
+      const tab = await navigateTab(id, url);
+      await recordVisit(tab.url, tab.title);
     },
     async toggleSplit(id) {
       await setSplit(get().splitId === id ? null : id);
