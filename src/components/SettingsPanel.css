@@ -58,6 +58,7 @@
   padding: 4px 10px;
   border-radius: 6px;
   cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
 
 .theme-option.selected {
@@ -78,6 +79,11 @@
   border: 2px solid transparent;
   cursor: pointer;
   padding: 0;
+  transition: border-color 0.12s ease, transform 0.12s ease;
+}
+
+.accent-swatch:hover {
+  transform: scale(1.12);
 }
 
 .accent-swatch.selected {

@@ -9,13 +9,15 @@ export interface AccentSwatch {
   dark: string;
 }
 
+// Grounded in one palette - the same warm, organic material as the default
+// moss accent - rather than generic hue-wheel swatches.
 export const ACCENT_SWATCHES: AccentSwatch[] = [
-  { id: "blue", label: "Blue", light: "#3b6fed", dark: "#6d93f7" },
-  { id: "purple", label: "Purple", light: "#8452e0", dark: "#a689f0" },
-  { id: "green", label: "Green", light: "#1f9d55", dark: "#4ade80" },
-  { id: "orange", label: "Orange", light: "#e0752f", dark: "#f4a361" },
-  { id: "pink", label: "Pink", light: "#d84a86", dark: "#f0729f" },
-  { id: "gray", label: "Gray", light: "#5b5f66", dark: "#9a9ea6" },
+  { id: "moss", label: "Moss", light: "#4b6b3a", dark: "#8fbb6e" },
+  { id: "clay", label: "Clay", light: "#a85c32", dark: "#d98f5f" },
+  { id: "ocean", label: "Ocean", light: "#2b6e7a", dark: "#6fb8c4" },
+  { id: "plum", label: "Plum", light: "#6b4a82", dark: "#b58fd1" },
+  { id: "honey", label: "Honey", light: "#a67c1d", dark: "#e0b24d" },
+  { id: "slate", label: "Slate", light: "#52564c", dark: "#9a9e8f" },
 ];
 
 const THEME_KEY = "twig:theme-mode";
@@ -69,7 +71,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
 
   return {
     themeMode: "system",
-    accentId: "blue",
+    accentId: "moss",
     panelOpen: false,
     togglePanel() {
       set((s) => ({ panelOpen: !s.panelOpen }));
@@ -79,7 +81,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     },
     init() {
       const storedTheme = (localStorage.getItem(THEME_KEY) as ThemeMode | null) ?? "system";
-      const storedAccent = localStorage.getItem(ACCENT_KEY) ?? "blue";
+      const storedAccent = localStorage.getItem(ACCENT_KEY) ?? "moss";
       set({ themeMode: storedTheme, accentId: storedAccent });
       applyTheme(storedTheme);
       applyAccent(storedAccent);

@@ -1,11 +1,20 @@
+/* Fraunces (SIL Open Font License) - used only for the "twig" wordmark. */
+@font-face {
+  font-family: "Fraunces Wordmark";
+  src: url("./assets/fonts/Fraunces-Italic-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
 :root {
-  --bg: #f7f7f8;
-  --border: rgba(0, 0, 0, 0.07);
-  --text: #1a1a1c;
-  --text-muted: #7a7a80;
-  --row-hover: rgba(0, 0, 0, 0.045);
-  --accent: #3b6fed;
-  --accent-tint: rgba(59, 111, 237, 0.12);
+  --bg: #f6f4ee;
+  --border: rgba(35, 38, 31, 0.08);
+  --text: #23261f;
+  --text-muted: #767a6c;
+  --row-hover: rgba(35, 38, 31, 0.045);
+  --accent: #4b6b3a;
+  --accent-tint: rgba(75, 107, 58, 0.12);
   --radius: 8px;
 
   font-family: -apple-system, "Inter", Avenir, Helvetica, Arial, sans-serif;
@@ -23,35 +32,35 @@
 /* Follows the OS when the user hasn't explicitly picked a theme. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #1c1d1f;
-    --border: rgba(255, 255, 255, 0.08);
-    --text: #f1f1f2;
-    --text-muted: #8b8b91;
-    --row-hover: rgba(255, 255, 255, 0.06);
-    --accent: #6d93f7;
-    --accent-tint: rgba(109, 147, 247, 0.18);
+    --bg: #17190f;
+    --border: rgba(233, 231, 221, 0.09);
+    --text: #e9e7dd;
+    --text-muted: #9a9c8d;
+    --row-hover: rgba(233, 231, 221, 0.06);
+    --accent: #8fbb6e;
+    --accent-tint: rgba(143, 187, 110, 0.18);
   }
 }
 
 /* Explicit choice from Settings wins over the OS either way. */
 :root[data-theme="dark"] {
-  --bg: #1c1d1f;
-  --border: rgba(255, 255, 255, 0.08);
-  --text: #f1f1f2;
-  --text-muted: #8b8b91;
-  --row-hover: rgba(255, 255, 255, 0.06);
-  --accent: #6d93f7;
-  --accent-tint: rgba(109, 147, 247, 0.18);
+  --bg: #17190f;
+  --border: rgba(233, 231, 221, 0.09);
+  --text: #e9e7dd;
+  --text-muted: #9a9c8d;
+  --row-hover: rgba(233, 231, 221, 0.06);
+  --accent: #8fbb6e;
+  --accent-tint: rgba(143, 187, 110, 0.18);
 }
 
 :root[data-theme="light"] {
-  --bg: #f7f7f8;
-  --border: rgba(0, 0, 0, 0.07);
-  --text: #1a1a1c;
-  --text-muted: #7a7a80;
-  --row-hover: rgba(0, 0, 0, 0.045);
-  --accent: #3b6fed;
-  --accent-tint: rgba(59, 111, 237, 0.12);
+  --bg: #f6f4ee;
+  --border: rgba(35, 38, 31, 0.08);
+  --text: #23261f;
+  --text-muted: #767a6c;
+  --row-hover: rgba(35, 38, 31, 0.045);
+  --accent: #4b6b3a;
+  --accent-tint: rgba(75, 107, 58, 0.12);
 }
 
 * {
