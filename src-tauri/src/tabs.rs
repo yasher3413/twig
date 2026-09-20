@@ -30,6 +30,9 @@ const HIBERNATE_AFTER: Duration = Duration::from_secs(10 * 60);
 /// How often the background sweep checks for idle tabs to hibernate.
 const IDLE_SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 
+/// How many recently-closed tabs are remembered for reopening.
+const CLOSED_STACK_CAP: usize = 20;
+
 const MAIN_WINDOW_LABEL: &str = "main";
 const DEFAULT_TAB_URL: &str = "about:blank";
 const DEFAULT_TAB_TITLE: &str = "New Tab";
@@ -69,6 +72,15 @@ pub struct TabsChangedPayload {
     pub split_id: Option<String>,
     pub groups: Vec<GroupInfo>,
     pub active_group_id: String,
+    pub sidebar_visible: bool,
+}
+
+/// A tab's last-known url/title/space, kept around after closing so it can
+/// be reopened.
+struct ClosedTab {
+    url: String,
+    title: String,
+    group_id: String,
 }
 
 struct TabEntry {
@@ -112,6 +124,8 @@ struct Inner {
     active_group_id: String,
     next_id: u64,
     next_group_id: u64,
+    sidebar_visible: bool,
+    closed_stack: Vec<ClosedTab>,
 }
 
 impl Default for Inner {
@@ -128,6 +142,8 @@ impl Default for Inner {
             active_group_id: "1".to_string(),
             next_id: 0,
             next_group_id: 1,
+            sidebar_visible: true,
+            closed_stack: Vec::new(),
         }
     }
 }
@@ -166,6 +182,7 @@ impl Inner {
                 })
                 .collect(),
             active_group_id: self.active_group_id.clone(),
+            sidebar_visible: self.sidebar_visible,
         }
     }
 }
@@ -185,35 +202,41 @@ fn tab_label(id: &str) -> String {
     format!("tab-{id}")
 }
 
-/// The window area to the right of the sidebar, available for tab content.
-fn content_area<R: Runtime>(window: &Window<R>) -> tauri::Result<LogicalSize<f64>> {
+/// The window area available for tab content: the full window, minus the
+/// sidebar's width when it's shown.
+fn content_area<R: Runtime>(window: &Window<R>, sidebar_visible: bool) -> tauri::Result<LogicalSize<f64>> {
+    let offset = if sidebar_visible { SIDEBAR_WIDTH } else { 0.0 };
     let scale = window.scale_factor()?;
     let logical = window.inner_size()?.to_logical::<f64>(scale);
     Ok(LogicalSize::new(
-        (logical.width - SIDEBAR_WIDTH).max(0.0),
+        (logical.width - offset).max(0.0),
         logical.height,
     ))
 }
 
 fn content_bounds<R: Runtime>(
     window: &Window<R>,
+    sidebar_visible: bool,
 ) -> tauri::Result<(LogicalPosition<f64>, LogicalSize<f64>)> {
-    let area = content_area(window)?;
-    Ok((LogicalPosition::new(SIDEBAR_WIDTH, 0.0), area))
+    let offset = if sidebar_visible { SIDEBAR_WIDTH } else { 0.0 };
+    let area = content_area(window, sidebar_visible)?;
+    Ok((LogicalPosition::new(offset, 0.0), area))
 }
 
 /// Left/right bounds for the two panes in split view.
 fn split_bounds<R: Runtime>(
     window: &Window<R>,
+    sidebar_visible: bool,
 ) -> tauri::Result<(
     (LogicalPosition<f64>, LogicalSize<f64>),
     (LogicalPosition<f64>, LogicalSize<f64>),
 )> {
-    let area = content_area(window)?;
+    let offset = if sidebar_visible { SIDEBAR_WIDTH } else { 0.0 };
+    let area = content_area(window, sidebar_visible)?;
     let half = ((area.width - SPLIT_GAP) / 2.0).max(0.0);
-    let left = (LogicalPosition::new(SIDEBAR_WIDTH, 0.0), LogicalSize::new(half, area.height));
+    let left = (LogicalPosition::new(offset, 0.0), LogicalSize::new(half, area.height));
     let right = (
-        LogicalPosition::new(SIDEBAR_WIDTH + half + SPLIT_GAP, 0.0),
+        LogicalPosition::new(offset + half + SPLIT_GAP, 0.0),
         LogicalSize::new(half, area.height),
     );
     Ok((left, right))
@@ -227,8 +250,9 @@ fn spawn_webview<R: Runtime>(
     label: &str,
     url: tauri::Url,
     scroll_y: f64,
+    sidebar_visible: bool,
 ) -> tauri::Result<Webview<R>> {
-    let (position, size) = content_bounds(window)?;
+    let (position, size) = content_bounds(window, sidebar_visible)?;
     let mut builder = WebviewBuilder::new(label, WebviewUrl::External(url));
     if scroll_y > 0.0 {
         builder = builder.initialization_script(format!(
@@ -261,7 +285,7 @@ fn sync_visible_webviews<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, inn
     let group = inner.active_group();
     match &group.split_id {
         Some(split_id) => {
-            let Ok((left, right)) = split_bounds(window) else {
+            let Ok((left, right)) = split_bounds(window, inner.sidebar_visible) else {
                 return;
             };
             if let Some(active) = &group.active_id {
@@ -270,7 +294,7 @@ fn sync_visible_webviews<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, inn
             place(app, split_id, right);
         }
         None => {
-            let Ok(bounds) = content_bounds(window) else {
+            let Ok(bounds) = content_bounds(window, inner.sidebar_visible) else {
                 return;
             };
             if let Some(active) = &group.active_id {
@@ -324,6 +348,7 @@ fn hibernate<R: Runtime>(app: &AppHandle<R>, entry: &mut TabEntry) {
 /// and marks it as just-viewed. Doesn't touch position or visibility -
 /// callers are expected to follow up with `sync_visible_webviews`.
 fn wake<R: Runtime>(window: &Window<R>, inner: &mut Inner, id: &str) -> Result<(), String> {
+    let sidebar_visible = inner.sidebar_visible;
     let entry = inner
         .tabs
         .iter_mut()
@@ -333,7 +358,7 @@ fn wake<R: Runtime>(window: &Window<R>, inner: &mut Inner, id: &str) -> Result<(
     if entry.status == TabStatus::Hibernated {
         let label = tab_label(id);
         let parsed: tauri::Url = entry.url.parse().map_err(|e| format!("invalid url: {e}"))?;
-        spawn_webview(window, &label, parsed, entry.scroll_y).map_err(|e| e.to_string())?;
+        spawn_webview(window, &label, parsed, entry.scroll_y, sidebar_visible).map_err(|e| e.to_string())?;
     }
     entry.status = TabStatus::Hot;
     entry.last_active_at = Instant::now();
@@ -423,40 +448,41 @@ fn switch_to_group<R: Runtime>(
     Ok(())
 }
 
-#[tauri::command]
-pub fn create_tab<R: Runtime>(
-    app: AppHandle<R>,
-    manager: State<'_, TabManager>,
-    url: Option<String>,
+/// Opens `url` as a new tab in the active space, making it the sole active
+/// view (dropping any existing split). Shared by `create_tab` and
+/// `reopen_closed_tab` - callers still need to call `sync_visible_webviews`
+/// / `focus_active` / `emit_tabs_changed` themselves afterward.
+fn open_tab<R: Runtime>(
+    app: &AppHandle<R>,
+    window: &Window<R>,
+    inner: &mut Inner,
+    url: String,
+    title: String,
 ) -> Result<TabInfo, String> {
-    let window = main_window(&app)?;
-    let url = url.unwrap_or_else(|| DEFAULT_TAB_URL.to_string());
     let parsed = url.parse().map_err(|e| format!("invalid url: {e}"))?;
 
-    let mut inner = manager.0.lock().unwrap();
     inner.next_id += 1;
     let id = inner.next_id.to_string();
     let label = tab_label(&id);
     let group_id = inner.active_group_id.clone();
 
-    spawn_webview(&window, &label, parsed, 0.0).map_err(|e| e.to_string())?;
+    spawn_webview(window, &label, parsed, 0.0, inner.sidebar_visible).map_err(|e| e.to_string())?;
 
-    // A new tab always takes over as the sole view - drop any split.
     let (prev_active, prev_split) = {
         let group = inner.active_group();
         (group.active_id.clone(), group.split_id.clone())
     };
     if let Some(active) = prev_active {
-        hide_tab(&app, &tab_label(&active)).map_err(|e| e.to_string())?;
+        hide_tab(app, &tab_label(&active)).map_err(|e| e.to_string())?;
     }
     if let Some(split) = prev_split {
-        hide_tab(&app, &tab_label(&split)).map_err(|e| e.to_string())?;
+        hide_tab(app, &tab_label(&split)).map_err(|e| e.to_string())?;
     }
 
     inner.tabs.push(TabEntry {
         id: id.clone(),
         url,
-        title: DEFAULT_TAB_TITLE.to_string(),
+        title,
         status: TabStatus::Hot,
         last_active_at: Instant::now(),
         scroll_y: 0.0,
@@ -467,14 +493,27 @@ pub fn create_tab<R: Runtime>(
         group.active_id = Some(id.clone());
         group.split_id = None;
     }
-    enforce_hot_cap(&app, &mut inner, &[id.clone()]);
+    enforce_hot_cap(app, inner, &[id.clone()]);
 
-    let info = inner
+    Ok(inner
         .tabs
         .iter()
         .find(|t| t.id == id)
         .map(TabEntry::to_info)
-        .expect("tab was just inserted");
+        .expect("tab was just inserted"))
+}
+
+#[tauri::command]
+pub fn create_tab<R: Runtime>(
+    app: AppHandle<R>,
+    manager: State<'_, TabManager>,
+    url: Option<String>,
+) -> Result<TabInfo, String> {
+    let window = main_window(&app)?;
+    let url = url.unwrap_or_else(|| DEFAULT_TAB_URL.to_string());
+
+    let mut inner = manager.0.lock().unwrap();
+    let info = open_tab(&app, &window, &mut inner, url, DEFAULT_TAB_TITLE.to_string())?;
 
     sync_visible_webviews(&app, &window, &inner);
     focus_active(&app, &inner);
@@ -558,7 +597,15 @@ pub fn close_tab<R: Runtime>(
     if let Some(webview) = app.get_webview(&tab_label(&id)) {
         webview.close().map_err(|e| e.to_string())?;
     }
-    inner.tabs.remove(index);
+    let closed = inner.tabs.remove(index);
+    inner.closed_stack.push(ClosedTab {
+        url: closed.url,
+        title: closed.title,
+        group_id: closed.group_id,
+    });
+    if inner.closed_stack.len() > CLOSED_STACK_CAP {
+        inner.closed_stack.remove(0);
+    }
 
     let was_split = inner.group(&group_id).and_then(|g| g.split_id.as_deref()) == Some(id.as_str());
     let was_active = inner.group(&group_id).and_then(|g| g.active_id.as_deref()) == Some(id.as_str());
@@ -950,6 +997,86 @@ pub fn rename_group<R: Runtime>(
         .name = name;
     emit_tabs_changed(&app, &inner);
     Ok(())
+}
+
+/// Reopens the most recently closed tab, switching to its original space
+/// first (falling back to the current space if that one no longer exists).
+/// Returns `None` if there's nothing to reopen.
+#[tauri::command]
+pub fn reopen_closed_tab<R: Runtime>(
+    app: AppHandle<R>,
+    manager: State<'_, TabManager>,
+) -> Result<Option<TabInfo>, String> {
+    let window = main_window(&app)?;
+    let mut inner = manager.0.lock().unwrap();
+
+    let Some(closed) = inner.closed_stack.pop() else {
+        return Ok(None);
+    };
+
+    let group_id = if inner.groups.iter().any(|g| g.id == closed.group_id) {
+        closed.group_id
+    } else {
+        inner.active_group_id.clone()
+    };
+    if inner.active_group_id != group_id {
+        switch_to_group(&app, &window, &mut inner, &group_id)?;
+    }
+
+    let info = open_tab(&app, &window, &mut inner, closed.url, closed.title)?;
+
+    sync_visible_webviews(&app, &window, &inner);
+    focus_active(&app, &inner);
+    emit_tabs_changed(&app, &inner);
+    Ok(Some(info))
+}
+
+/// Shows or hides the sidebar, returning the new state. Hiding it lets the
+/// active tab's webview expand to cover the full window - it isn't a
+/// separate "collapsed" layout, just a width of zero.
+#[tauri::command]
+pub fn toggle_sidebar<R: Runtime>(
+    app: AppHandle<R>,
+    manager: State<'_, TabManager>,
+) -> Result<bool, String> {
+    let window = main_window(&app)?;
+    let mut inner = manager.0.lock().unwrap();
+    inner.sidebar_visible = !inner.sidebar_visible;
+    sync_visible_webviews(&app, &window, &inner);
+    emit_tabs_changed(&app, &inner);
+    Ok(inner.sidebar_visible)
+}
+
+/// Finds `query` in the active tab's page via the browser's native
+/// `window.find`, scrolling to and highlighting the next (or, if
+/// `backwards`, previous) match. An empty query just clears the current
+/// selection instead of searching.
+#[tauri::command]
+pub fn find_in_page<R: Runtime>(
+    app: AppHandle<R>,
+    manager: State<'_, TabManager>,
+    query: String,
+    backwards: bool,
+) -> Result<(), String> {
+    let active_id = {
+        let inner = manager.0.lock().unwrap();
+        inner.active_group().active_id.clone()
+    };
+    let Some(active_id) = active_id else {
+        return Ok(());
+    };
+    let Some(webview) = app.get_webview(&tab_label(&active_id)) else {
+        return Ok(());
+    };
+
+    if query.trim().is_empty() {
+        let _ = webview.eval("window.getSelection() && window.getSelection().removeAllRanges();");
+        return Ok(());
+    }
+
+    let query_js = serde_json::to_string(&query).map_err(|e| e.to_string())?;
+    let js = format!("window.find({query_js}, false, {backwards}, true, false, false, false);");
+    webview.eval(js).map_err(|e| e.to_string())
 }
 
 /// Keeps the visible webview(s) sized to fill the window whenever it
