@@ -12,6 +12,7 @@ export interface Tab {
 export interface TabsChangedPayload {
   tabs: Tab[];
   activeId: string | null;
+  splitId: string | null;
 }
 
 export function createTab(url?: string): Promise<Tab> {
@@ -40,4 +41,8 @@ export function navigateTab(id: string, url: string): Promise<Tab> {
 
 export function setOverlayActive(open: boolean): Promise<void> {
   return invoke("set_overlay_active", { open });
+}
+
+export function setSplit(id: string | null): Promise<void> {
+  return invoke("set_split", { id });
 }

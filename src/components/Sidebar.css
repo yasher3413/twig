@@ -96,6 +96,10 @@
   font-weight: 500;
 }
 
+.tab.split {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
 .tab.dragging {
   opacity: 0.4;
 }
@@ -127,4 +131,21 @@
 .tab:hover .close,
 .tab.active .close {
   opacity: 1;
+}
+
+.split-toggle {
+  width: auto;
+  padding: 0 6px;
+  font-size: 11px;
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.tab:hover .split-toggle,
+.split-toggle.on {
+  opacity: 1;
+}
+
+.split-toggle.on {
+  color: var(--accent);
 }

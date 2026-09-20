@@ -3,7 +3,8 @@ import { useTabStore } from "../store/tabs";
 import "./Sidebar.css";
 
 export function Sidebar() {
-  const { tabs, activeId, ready, init, newTab, switchTo, close, reorder } = useTabStore();
+  const { tabs, activeId, splitId, ready, init, newTab, switchTo, close, reorder, toggleSplit } =
+    useTabStore();
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
 
@@ -38,11 +39,18 @@ export function Sidebar() {
               className={
                 "tab" +
                 (tab.id === activeId ? " active" : "") +
+                (tab.id === splitId ? " split" : "") +
                 (draggingId === tab.id ? " dragging" : "") +
                 (tab.status === "hibernated" ? " hibernated" : "")
               }
               draggable
-              onClick={() => switchTo(tab.id)}
+              onClick={(e) => {
+                if ((e.altKey || e.metaKey) && tab.id !== activeId) {
+                  toggleSplit(tab.id);
+                } else {
+                  switchTo(tab.id);
+                }
+              }}
               onDragStart={() => setDraggingId(tab.id)}
               onDragEnd={() => {
                 setDraggingId(null);
@@ -58,6 +66,18 @@ export function Sidebar() {
                 <span className="status-dot" title="Hibernated — click to wake" />
               )}
               <span className="title">{tab.title}</span>
+              {tab.id !== activeId && (
+                <button
+                  className={tab.id === splitId ? "icon-button split-toggle on" : "icon-button split-toggle"}
+                  title={tab.id === splitId ? "Remove from split view" : "Open in split view"}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSplit(tab.id);
+                  }}
+                >
+                  split
+                </button>
+              )}
               <button
                 className="icon-button close"
                 title="Close tab"

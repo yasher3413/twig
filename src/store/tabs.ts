@@ -7,6 +7,7 @@ import {
   listTabs,
   navigateTab,
   reorderTab,
+  setSplit,
   type Tab,
   type TabsChangedPayload,
 } from "../lib/tabs";
@@ -14,6 +15,7 @@ import {
 interface TabStore {
   tabs: Tab[];
   activeId: string | null;
+  splitId: string | null;
   ready: boolean;
   init: () => Promise<void>;
   newTab: (url?: string) => Promise<void>;
@@ -21,11 +23,12 @@ interface TabStore {
   close: (id: string) => Promise<void>;
   reorder: (id: string, toIndex: number) => Promise<void>;
   navigate: (id: string, url: string) => Promise<void>;
+  toggleSplit: (id: string) => Promise<void>;
 }
 
-export const useTabStore = create<TabStore>((set) => {
+export const useTabStore = create<TabStore>((set, get) => {
   function applyPayload(payload: TabsChangedPayload) {
-    set({ tabs: payload.tabs, activeId: payload.activeId });
+    set({ tabs: payload.tabs, activeId: payload.activeId, splitId: payload.splitId });
   }
 
   // Rust owns tab state; this listener is what keeps the store in sync
@@ -35,6 +38,7 @@ export const useTabStore = create<TabStore>((set) => {
   return {
     tabs: [],
     activeId: null,
+    splitId: null,
     ready: false,
     async init() {
       applyPayload(await listTabs());
@@ -54,6 +58,9 @@ export const useTabStore = create<TabStore>((set) => {
     },
     async navigate(id, url) {
       await navigateTab(id, url);
+    },
+    async toggleSplit(id) {
+      await setSplit(get().splitId === id ? null : id);
     },
   };
 });
