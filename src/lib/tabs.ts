@@ -22,6 +22,7 @@ export interface TabsChangedPayload {
   groups: Group[];
   activeGroupId: string;
   sidebarVisible: boolean;
+  isPrivate: boolean;
 }
 
 export function createTab(url?: string): Promise<Tab> {
@@ -82,4 +83,8 @@ export function toggleSidebar(): Promise<boolean> {
 
 export function findInPage(query: string, backwards: boolean): Promise<void> {
   return invoke("find_in_page", { query, backwards });
+}
+
+export function openPrivateWindow(): Promise<void> {
+  return invoke("open_private_window");
 }

@@ -11,6 +11,7 @@ export function Sidebar() {
     splitId,
     activeGroupId,
     sidebarVisible,
+    isPrivate,
     ready,
     init,
     newTab,
@@ -44,7 +45,10 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <span className="wordmark">twig</span>
+        <span className="wordmark">
+          twig
+          {isPrivate && <span className="private-badge">Private</span>}
+        </span>
         <button className="icon-button" title="New tab" onClick={() => newTab()}>
           +
         </button>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useTabStore } from "../store/tabs";
-import { setOverlayActive } from "../lib/tabs";
+import { openPrivateWindow, setOverlayActive } from "../lib/tabs";
 import {
   addBookmark,
   isBookmarked,
@@ -127,6 +127,7 @@ export function CommandPalette() {
 
     const commands: ResultItem[] = [
       { key: "cmd-new-tab", label: "New Tab", run: () => newTab() },
+      { key: "cmd-new-private-window", label: "New Private Window", run: () => openPrivateWindow() },
     ];
     if (activeId) {
       commands.push({

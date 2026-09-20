@@ -27,6 +27,7 @@ interface TabStore {
   groups: Group[];
   activeGroupId: string;
   sidebarVisible: boolean;
+  isPrivate: boolean;
   ready: boolean;
   init: () => Promise<void>;
   newTab: (url?: string) => Promise<void>;
@@ -52,6 +53,7 @@ export const useTabStore = create<TabStore>((set, get) => {
       groups: payload.groups,
       activeGroupId: payload.activeGroupId,
       sidebarVisible: payload.sidebarVisible,
+      isPrivate: payload.isPrivate,
     });
   }
 
@@ -66,6 +68,7 @@ export const useTabStore = create<TabStore>((set, get) => {
     groups: [],
     activeGroupId: "",
     sidebarVisible: true,
+    isPrivate: false,
     ready: false,
     async init() {
       applyPayload(await listTabs());
@@ -73,7 +76,7 @@ export const useTabStore = create<TabStore>((set, get) => {
     },
     async newTab(url) {
       const tab = await createTab(url);
-      await recordVisit(tab.url, tab.title);
+      if (!get().isPrivate) await recordVisit(tab.url, tab.title);
     },
     async switchTo(id) {
       await activateTab(id);
@@ -86,7 +89,7 @@ export const useTabStore = create<TabStore>((set, get) => {
     },
     async navigate(id, url) {
       const tab = await navigateTab(id, url);
-      await recordVisit(tab.url, tab.title);
+      if (!get().isPrivate) await recordVisit(tab.url, tab.title);
     },
     async toggleSplit(id) {
       await setSplit(get().splitId === id ? null : id);
@@ -105,7 +108,7 @@ export const useTabStore = create<TabStore>((set, get) => {
     },
     async reopenClosed() {
       const tab = await reopenClosedTab();
-      if (tab) await recordVisit(tab.url, tab.title);
+      if (tab && !get().isPrivate) await recordVisit(tab.url, tab.title);
     },
     async toggleSidebar() {
       await toggleSidebarCommand();
