@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTabStore } from "../store/tabs";
+import { useSettingsStore } from "../store/settings";
 import { SpaceSwitcher } from "./SpaceSwitcher";
 import { FindBar } from "./FindBar";
 import "./Sidebar.css";
@@ -20,6 +21,7 @@ export function Sidebar() {
     reorder,
     toggleSplit,
   } = useTabStore();
+  const togglePanel = useSettingsStore((s) => s.togglePanel);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
 
@@ -49,16 +51,26 @@ export function Sidebar() {
           twig
           {isPrivate && <span className="private-badge">Private</span>}
         </span>
-        <button className="icon-button" title="New tab" onClick={() => newTab()}>
-          +
-        </button>
+        <div className="header-actions">
+          <button className="icon-button" title="Settings" onClick={togglePanel}>
+            ⚙
+          </button>
+          <button className="icon-button" title="New tab" onClick={() => newTab()}>
+            +
+          </button>
+        </div>
       </div>
 
       <SpaceSwitcher />
       <FindBar />
 
       <ul className="tab-list" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
-        {ready && spaceTabs.length === 0 && <li className="empty">No tabs open</li>}
+        {ready && spaceTabs.length === 0 && (
+          <li className="empty">
+            No tabs open
+            <span className="empty-hint">⌘T for a new one</span>
+          </li>
+        )}
 
         {spaceTabs.map((tab, index) => (
           <li key={tab.id}>

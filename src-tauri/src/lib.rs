@@ -70,6 +70,8 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         )
         .item(&MenuItemBuilder::with_id("find-in-page", "Find in Page").accelerator("CmdOrCtrl+F").build(app)?)
         .item(&MenuItemBuilder::with_id("toggle-sidebar", "Toggle Sidebar").accelerator("CmdOrCtrl+B").build(app)?)
+        .separator()
+        .item(&MenuItemBuilder::with_id("settings", "Settings…").accelerator("CmdOrCtrl+,").build(app)?)
         .separator();
 
     for n in 1..=9u32 {

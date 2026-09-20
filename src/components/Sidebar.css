@@ -39,6 +39,12 @@
   padding: 1px 5px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .icon-button {
   border: none;
   background: transparent;
@@ -71,8 +77,16 @@
 }
 
 .tab-list .empty {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   color: var(--text-muted);
   padding: 6px 10px;
+}
+
+.empty-hint {
+  font-size: 11px;
+  opacity: 0.7;
 }
 
 .drop-zone {

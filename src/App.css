@@ -20,8 +20,9 @@
   -webkit-text-size-adjust: 100%;
 }
 
+/* Follows the OS when the user hasn't explicitly picked a theme. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #1c1d1f;
     --border: rgba(255, 255, 255, 0.08);
     --text: #f1f1f2;
@@ -30,6 +31,27 @@
     --accent: #6d93f7;
     --accent-tint: rgba(109, 147, 247, 0.18);
   }
+}
+
+/* Explicit choice from Settings wins over the OS either way. */
+:root[data-theme="dark"] {
+  --bg: #1c1d1f;
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #f1f1f2;
+  --text-muted: #8b8b91;
+  --row-hover: rgba(255, 255, 255, 0.06);
+  --accent: #6d93f7;
+  --accent-tint: rgba(109, 147, 247, 0.18);
+}
+
+:root[data-theme="light"] {
+  --bg: #f7f7f8;
+  --border: rgba(0, 0, 0, 0.07);
+  --text: #1a1a1c;
+  --text-muted: #7a7a80;
+  --row-hover: rgba(0, 0, 0, 0.045);
+  --accent: #3b6fed;
+  --accent-tint: rgba(59, 111, 237, 0.12);
 }
 
 * {

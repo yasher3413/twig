@@ -2,11 +2,15 @@ import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Sidebar } from "./components/Sidebar";
 import { CommandPalette } from "./components/CommandPalette";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { useTabStore } from "./store/tabs";
+import { useSettingsStore } from "./store/settings";
 import "./App.css";
 
 function App() {
   useEffect(() => {
+    useSettingsStore.getState().init();
+
     const unlistenAction = listen<string>("menu-action", (event) => {
       const store = useTabStore.getState();
       switch (event.payload) {
@@ -22,8 +26,8 @@ function App() {
         case "toggle-sidebar":
           store.toggleSidebar();
           break;
-        // "command-palette" and "find-in-page" are handled by those
-        // components directly.
+        // "command-palette", "find-in-page", and "settings" are handled by
+        // those components directly.
       }
     });
 
@@ -45,6 +49,7 @@ function App() {
     <>
       <Sidebar />
       <CommandPalette />
+      <SettingsPanel />
     </>
   );
 }
