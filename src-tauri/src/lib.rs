@@ -9,6 +9,7 @@ pub fn run() {
         .manage(TabManager::new())
         .setup(|app| {
             tabs::watch_window_resize(app.handle());
+            tabs::watch_idle_tabs(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
