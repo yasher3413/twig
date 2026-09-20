@@ -1,0 +1,118 @@
+/* Width must match SIDEBAR_WIDTH in src-tauri/src/tabs.rs so this chrome and
+   the tab content webviews never overlap. */
+.sidebar {
+  width: 240px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 8px;
+  gap: 4px;
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 10px;
+}
+
+.wordmark {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.icon-button {
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+.tab-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.tab-list .empty {
+  color: var(--text-muted);
+  padding: 6px 10px;
+}
+
+.drop-zone {
+  flex: 1;
+  min-height: 12px;
+}
+
+.drop-indicator {
+  height: 2px;
+  margin: 0 8px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  margin: 1px 0;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.tab:hover {
+  background: var(--row-hover);
+}
+
+.tab.active {
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.tab.dragging {
+  opacity: 0.4;
+}
+
+.tab .title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.tab .close {
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.tab:hover .close,
+.tab.active .close {
+  opacity: 1;
+}
