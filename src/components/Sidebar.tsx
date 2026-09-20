@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTabStore } from "../store/tabs";
 import { SpaceSwitcher } from "./SpaceSwitcher";
+import { FindBar } from "./FindBar";
 import "./Sidebar.css";
 
 export function Sidebar() {
@@ -9,6 +10,7 @@ export function Sidebar() {
     activeId,
     splitId,
     activeGroupId,
+    sidebarVisible,
     ready,
     init,
     newTab,
@@ -37,6 +39,8 @@ export function Sidebar() {
     setOverIndex(null);
   }
 
+  if (!sidebarVisible) return null;
+
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
@@ -47,6 +51,7 @@ export function Sidebar() {
       </div>
 
       <SpaceSwitcher />
+      <FindBar />
 
       <ul className="tab-list" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
         {ready && spaceTabs.length === 0 && <li className="empty">No tabs open</li>}

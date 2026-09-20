@@ -9,9 +9,11 @@ import {
   listTabs,
   navigateTab,
   renameGroup,
+  reopenClosedTab,
   reorderTab,
   setSplit,
   switchGroup,
+  toggleSidebar as toggleSidebarCommand,
   type Group,
   type Tab,
   type TabsChangedPayload,
@@ -24,6 +26,7 @@ interface TabStore {
   splitId: string | null;
   groups: Group[];
   activeGroupId: string;
+  sidebarVisible: boolean;
   ready: boolean;
   init: () => Promise<void>;
   newTab: (url?: string) => Promise<void>;
@@ -36,6 +39,8 @@ interface TabStore {
   switchSpace: (id: string) => Promise<void>;
   closeSpace: (id: string) => Promise<void>;
   renameSpace: (id: string, name: string) => Promise<void>;
+  reopenClosed: () => Promise<void>;
+  toggleSidebar: () => Promise<void>;
 }
 
 export const useTabStore = create<TabStore>((set, get) => {
@@ -46,6 +51,7 @@ export const useTabStore = create<TabStore>((set, get) => {
       splitId: payload.splitId,
       groups: payload.groups,
       activeGroupId: payload.activeGroupId,
+      sidebarVisible: payload.sidebarVisible,
     });
   }
 
@@ -59,6 +65,7 @@ export const useTabStore = create<TabStore>((set, get) => {
     splitId: null,
     groups: [],
     activeGroupId: "",
+    sidebarVisible: true,
     ready: false,
     async init() {
       applyPayload(await listTabs());
@@ -95,6 +102,13 @@ export const useTabStore = create<TabStore>((set, get) => {
     },
     async renameSpace(id, name) {
       await renameGroup(id, name);
+    },
+    async reopenClosed() {
+      const tab = await reopenClosedTab();
+      if (tab) await recordVisit(tab.url, tab.title);
+    },
+    async toggleSidebar() {
+      await toggleSidebarCommand();
     },
   };
 });

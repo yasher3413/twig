@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { useTabStore } from "../store/tabs";
 import { setOverlayActive } from "../lib/tabs";
 import {
@@ -38,14 +39,17 @@ export function CommandPalette() {
   const activeTab = tabs.find((t) => t.id === activeId) ?? null;
 
   useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
+    // Triggered via a native menu accelerator, not a page-level keydown
+    // listener: the active tab's webview usually holds keyboard focus,
+    // which is a separate context our chrome's own listeners can't see.
+    const unlisten = listen<string>("menu-action", (event) => {
+      if (event.payload === "command-palette") {
         setOpen((o) => !o);
       }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    });
+    return () => {
+      unlisten.then((f) => f());
+    };
   }, []);
 
   useEffect(() => {

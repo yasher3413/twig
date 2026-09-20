@@ -1,0 +1,44 @@
+.find-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 4px 8px;
+  padding: 4px 6px;
+  border-radius: var(--radius);
+  background: var(--row-hover);
+}
+
+.find-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.find-input::placeholder {
+  color: var(--text-muted);
+}
+
+.find-nav,
+.find-close {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 4px;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.find-nav:hover,
+.find-close:hover {
+  background: var(--border);
+  color: var(--text);
+}

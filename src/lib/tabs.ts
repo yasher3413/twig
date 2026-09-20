@@ -21,6 +21,7 @@ export interface TabsChangedPayload {
   splitId: string | null;
   groups: Group[];
   activeGroupId: string;
+  sidebarVisible: boolean;
 }
 
 export function createTab(url?: string): Promise<Tab> {
@@ -69,4 +70,16 @@ export function closeGroup(id: string): Promise<void> {
 
 export function renameGroup(id: string, name: string): Promise<void> {
   return invoke("rename_group", { id, name });
+}
+
+export function reopenClosedTab(): Promise<Tab | null> {
+  return invoke("reopen_closed_tab");
+}
+
+export function toggleSidebar(): Promise<boolean> {
+  return invoke("toggle_sidebar");
+}
+
+export function findInPage(query: string, backwards: boolean): Promise<void> {
+  return invoke("find_in_page", { query, backwards });
 }
