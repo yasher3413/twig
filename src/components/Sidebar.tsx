@@ -1,12 +1,29 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTabStore } from "../store/tabs";
+import { SpaceSwitcher } from "./SpaceSwitcher";
 import "./Sidebar.css";
 
 export function Sidebar() {
-  const { tabs, activeId, splitId, ready, init, newTab, switchTo, close, reorder, toggleSplit } =
-    useTabStore();
+  const {
+    tabs,
+    activeId,
+    splitId,
+    activeGroupId,
+    ready,
+    init,
+    newTab,
+    switchTo,
+    close,
+    reorder,
+    toggleSplit,
+  } = useTabStore();
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
+
+  const spaceTabs = useMemo(
+    () => tabs.filter((tab) => tab.groupId === activeGroupId),
+    [tabs, activeGroupId],
+  );
 
   useEffect(() => {
     init();
@@ -29,10 +46,12 @@ export function Sidebar() {
         </button>
       </div>
 
-      <ul className="tab-list" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
-        {ready && tabs.length === 0 && <li className="empty">No tabs open</li>}
+      <SpaceSwitcher />
 
-        {tabs.map((tab, index) => (
+      <ul className="tab-list" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+        {ready && spaceTabs.length === 0 && <li className="empty">No tabs open</li>}
+
+        {spaceTabs.map((tab, index) => (
           <li key={tab.id}>
             {overIndex === index && <div className="drop-indicator" />}
             <div
@@ -97,10 +116,10 @@ export function Sidebar() {
           onDragOver={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            setOverIndex(tabs.length);
+            setOverIndex(spaceTabs.length);
           }}
         >
-          {overIndex === tabs.length && <div className="drop-indicator" />}
+          {overIndex === spaceTabs.length && <div className="drop-indicator" />}
         </li>
       </ul>
     </aside>

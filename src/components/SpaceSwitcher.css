@@ -1,0 +1,76 @@
+.space-switcher {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px 8px;
+  overflow-x: auto;
+}
+
+.space-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.space-pill:hover {
+  background: var(--row-hover);
+}
+
+.space-pill.active {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.space-pill-input {
+  width: 70px;
+  font: inherit;
+  font-size: 11px;
+  color: inherit;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid currentColor;
+  outline: none;
+}
+
+.space-pill-close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.space-pill:hover .space-pill-close {
+  opacity: 0.7;
+}
+
+.space-pill-close:hover {
+  opacity: 1 !important;
+}
+
+.space-pill-add {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 999px;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.space-pill-add:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}
