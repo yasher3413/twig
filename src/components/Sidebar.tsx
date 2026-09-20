@@ -38,7 +38,8 @@ export function Sidebar() {
               className={
                 "tab" +
                 (tab.id === activeId ? " active" : "") +
-                (draggingId === tab.id ? " dragging" : "")
+                (draggingId === tab.id ? " dragging" : "") +
+                (tab.status === "hibernated" ? " hibernated" : "")
               }
               draggable
               onClick={() => switchTo(tab.id)}
@@ -53,6 +54,9 @@ export function Sidebar() {
                 setOverIndex(index);
               }}
             >
+              {tab.status === "hibernated" && (
+                <span className="status-dot" title="Hibernated — click to wake" />
+              )}
               <span className="title">{tab.title}</span>
               <button
                 className="icon-button close"

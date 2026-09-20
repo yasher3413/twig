@@ -107,6 +107,18 @@
   flex: 1;
 }
 
+.tab.hibernated .title {
+  opacity: 0.6;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--text-muted);
+}
+
 .tab .close {
   opacity: 0;
   flex-shrink: 0;

@@ -1,9 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export type TabStatus = "hot" | "hibernated";
+
 export interface Tab {
   id: string;
   url: string;
   title: string;
+  status: TabStatus;
 }
 
 export interface TabsChangedPayload {
