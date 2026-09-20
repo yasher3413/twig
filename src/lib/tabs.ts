@@ -33,3 +33,11 @@ export function listTabs(): Promise<TabsChangedPayload> {
 export function reorderTab(id: string, toIndex: number): Promise<void> {
   return invoke("reorder_tab", { id, toIndex });
 }
+
+export function navigateTab(id: string, url: string): Promise<Tab> {
+  return invoke("navigate_tab", { id, url });
+}
+
+export function setOverlayActive(open: boolean): Promise<void> {
+  return invoke("set_overlay_active", { open });
+}

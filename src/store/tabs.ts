@@ -5,6 +5,7 @@ import {
   closeTab,
   createTab,
   listTabs,
+  navigateTab,
   reorderTab,
   type Tab,
   type TabsChangedPayload,
@@ -19,6 +20,7 @@ interface TabStore {
   switchTo: (id: string) => Promise<void>;
   close: (id: string) => Promise<void>;
   reorder: (id: string, toIndex: number) => Promise<void>;
+  navigate: (id: string, url: string) => Promise<void>;
 }
 
 export const useTabStore = create<TabStore>((set) => {
@@ -49,6 +51,9 @@ export const useTabStore = create<TabStore>((set) => {
     },
     async reorder(id, toIndex) {
       await reorderTab(id, toIndex);
+    },
+    async navigate(id, url) {
+      await navigateTab(id, url);
     },
   };
 });
