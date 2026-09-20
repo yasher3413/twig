@@ -393,6 +393,79 @@ pub fn reorder_tab<R: Runtime>(
     Ok(())
 }
 
+/// Adds `https://` to a bare host/query typed into the command palette
+/// (e.g. "example.com") if it doesn't already look like a full URL.
+fn normalize_url(input: &str) -> String {
+    let trimmed = input.trim();
+    if trimmed.contains("://") {
+        trimmed.to_string()
+    } else {
+        format!("https://{trimmed}")
+    }
+}
+
+fn derive_title(url: &tauri::Url) -> String {
+    url.host_str().map(str::to_string).unwrap_or_else(|| url.to_string())
+}
+
+/// Navigates a tab to a new URL, live if it's hot (otherwise the new URL
+/// just takes effect the next time it wakes).
+#[tauri::command]
+pub fn navigate_tab<R: Runtime>(
+    app: AppHandle<R>,
+    manager: State<'_, TabManager>,
+    id: String,
+    url: String,
+) -> Result<TabInfo, String> {
+    let parsed: tauri::Url = normalize_url(&url)
+        .parse()
+        .map_err(|e| format!("invalid url: {e}"))?;
+
+    let mut inner = manager.0.lock().unwrap();
+    let entry = inner
+        .tabs
+        .iter_mut()
+        .find(|t| t.id == id)
+        .ok_or_else(|| format!("no such tab: {id}"))?;
+
+    entry.url = parsed.to_string();
+    entry.title = derive_title(&parsed);
+    entry.scroll_y = 0.0;
+
+    if entry.status == TabStatus::Hot {
+        if let Some(webview) = app.get_webview(&tab_label(&id)) {
+            webview.navigate(parsed).map_err(|e| e.to_string())?;
+        }
+    }
+
+    let info = entry.to_info();
+    emit_tabs_changed(&app, &inner);
+    Ok(info)
+}
+
+/// Hides (or restores) the active tab's webview so full-window chrome
+/// overlays (the command palette, and later ones like it) can actually be
+/// seen: tab content is a separate, higher native webview that DOM z-index
+/// can't draw over.
+#[tauri::command]
+pub fn set_overlay_active<R: Runtime>(
+    app: AppHandle<R>,
+    manager: State<'_, TabManager>,
+    open: bool,
+) -> Result<(), String> {
+    let window = main_window(&app)?;
+    let inner = manager.0.lock().unwrap();
+    let Some(active_id) = inner.active_id.clone() else {
+        return Ok(());
+    };
+    let label = tab_label(&active_id);
+    if open {
+        hide_tab(&app, &label).map_err(|e| e.to_string())
+    } else {
+        show_tab(&app, &window, &label).map_err(|e| e.to_string())
+    }
+}
+
 /// Keeps the active tab's webview sized to fill the window whenever the
 /// window itself is resized (hidden tabs are repositioned lazily when they
 /// next become active instead).

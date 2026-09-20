@@ -18,6 +18,8 @@ pub fn run() {
             tabs::close_tab,
             tabs::list_tabs,
             tabs::reorder_tab,
+            tabs::navigate_tab,
+            tabs::set_overlay_active,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
