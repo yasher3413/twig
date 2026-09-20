@@ -2,7 +2,7 @@ mod tabs;
 
 use tabs::TabManager;
 use tauri::menu::{Menu, MenuItemBuilder, SubmenuBuilder};
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 /// The frontend talks to this database directly via @tauri-apps/plugin-sql
@@ -58,6 +58,12 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         )
         .separator()
         .item(
+            &MenuItemBuilder::with_id("new-private-window", "New Private Window")
+                .accelerator("CmdOrCtrl+Shift+N")
+                .build(app)?,
+        )
+        .separator()
+        .item(
             &MenuItemBuilder::with_id("command-palette", "Command Palette…")
                 .accelerator("CmdOrCtrl+K")
                 .build(app)?,
@@ -91,14 +97,32 @@ pub fn run() {
         .menu(build_menu)
         .on_menu_event(|app, event| {
             let id = event.id().0.as_str();
+
+            // Not tied to any particular window's tab state - handled here
+            // directly rather than forwarded to a frontend.
+            if id == "new-private-window" {
+                let _ = tabs::open_private_window(app.clone(), app.state());
+                return;
+            }
+
+            // Every other action targets whichever window was focused when
+            // the accelerator fired - a plain broadcast would make every
+            // open window (main plus any private ones) act on it at once.
+            let Some(window) = app.get_focused_window() else {
+                return;
+            };
+            let target = EventTarget::webview(window.label());
             if let Some(n) = id.strip_prefix("goto-tab-") {
-                let _ = app.emit("menu-goto-tab", n.to_string());
+                let _ = app.emit_to(target, "menu-goto-tab", n.to_string());
             } else {
-                let _ = app.emit("menu-action", id.to_string());
+                let _ = app.emit_to(target, "menu-action", id.to_string());
             }
         })
         .setup(|app| {
-            tabs::watch_window_resize(app.handle());
+            let main_window = app
+                .get_window(tabs::MAIN_WINDOW_LABEL)
+                .expect("main window declared in tauri.conf.json must exist");
+            tabs::watch_window(app.handle(), &main_window);
             tabs::watch_idle_tabs(app.handle());
             Ok(())
         })
@@ -118,6 +142,7 @@ pub fn run() {
             tabs::reopen_closed_tab,
             tabs::toggle_sidebar,
             tabs::find_in_page,
+            tabs::open_private_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

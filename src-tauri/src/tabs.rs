@@ -1,11 +1,13 @@
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{
-    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Runtime, State, Webview,
-    WebviewBuilder, WebviewUrl, Window, WindowEvent,
+    AppHandle, Emitter, EventTarget, LogicalPosition, LogicalSize, Manager, Runtime, State,
+    Webview, WebviewBuilder, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent,
 };
 
 /// Width, in logical pixels, reserved on the left edge of the window for the
@@ -17,9 +19,9 @@ pub const SIDEBAR_WIDTH: f64 = 240.0;
 const SPLIT_GAP: f64 = 1.0;
 
 /// How many tabs are allowed to stay "hot" (a live webview) at once, across
-/// *all* spaces combined. Opening or activating a tab beyond this count
-/// hibernates the least-recently-used hot tab. Not user-configurable yet;
-/// that'll come with the settings UI.
+/// *all* spaces combined, within a single window. Opening or activating a
+/// tab beyond this count hibernates the least-recently-used hot tab. Not
+/// user-configurable yet; that'll come with the settings UI.
 const MAX_HOT_TABS: usize = 5;
 
 /// How long a hot tab can sit outside the current space's view before it's
@@ -33,9 +35,14 @@ const IDLE_SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 /// How many recently-closed tabs are remembered for reopening.
 const CLOSED_STACK_CAP: usize = 20;
 
-const MAIN_WINDOW_LABEL: &str = "main";
+pub const MAIN_WINDOW_LABEL: &str = "main";
 const DEFAULT_TAB_URL: &str = "about:blank";
 const DEFAULT_TAB_TITLE: &str = "New Tab";
+
+/// Tab ids double as webview labels, which must be unique across the whole
+/// app - not just within one window - so this is a single shared counter
+/// rather than a per-window one.
+static NEXT_TAB_ID: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -73,6 +80,7 @@ pub struct TabsChangedPayload {
     pub groups: Vec<GroupInfo>,
     pub active_group_id: String,
     pub sidebar_visible: bool,
+    pub is_private: bool,
 }
 
 /// A tab's last-known url/title/space, kept around after closing so it can
@@ -108,9 +116,9 @@ impl TabEntry {
 
 /// A "space": an independent set of tabs with its own remembered active tab
 /// and split partner. Switching spaces swaps which tabs are on screen, but
-/// doesn't hibernate anything by itself - the global hot-tab cap and idle
-/// sweep (which only protect the *current* space's visible tabs) take care
-/// of reclaiming memory from tabs left behind in other spaces over time.
+/// doesn't hibernate anything by itself - the hot-tab cap and idle sweep
+/// (which only protect the *current* space's visible tabs) take care of
+/// reclaiming memory from tabs left behind in other spaces over time.
 struct Group {
     id: String,
     name: String,
@@ -118,14 +126,20 @@ struct Group {
     split_id: Option<String>,
 }
 
+/// Per-window tab state. Every window (the main one, and any private ones)
+/// gets its own independent `Inner`, keyed by window label - see
+/// `TabManager`.
 struct Inner {
     tabs: Vec<TabEntry>,
     groups: Vec<Group>,
     active_group_id: String,
-    next_id: u64,
     next_group_id: u64,
     sidebar_visible: bool,
     closed_stack: Vec<ClosedTab>,
+    /// Private windows use a non-persistent webview data store (no cookies
+    /// or site data written to disk) and skip history/bookmark recording
+    /// on the frontend side.
+    is_private: bool,
 }
 
 impl Default for Inner {
@@ -140,15 +154,22 @@ impl Default for Inner {
             tabs: Vec::new(),
             groups: vec![first_group],
             active_group_id: "1".to_string(),
-            next_id: 0,
             next_group_id: 1,
             sidebar_visible: true,
             closed_stack: Vec::new(),
+            is_private: false,
         }
     }
 }
 
 impl Inner {
+    fn new_private() -> Self {
+        Inner {
+            is_private: true,
+            ..Default::default()
+        }
+    }
+
     fn group(&self, id: &str) -> Option<&Group> {
         self.groups.iter().find(|g| g.id == id)
     }
@@ -183,19 +204,30 @@ impl Inner {
                 .collect(),
             active_group_id: self.active_group_id.clone(),
             sidebar_visible: self.sidebar_visible,
+            is_private: self.is_private,
         }
     }
 }
 
-/// Owns the set of open tabs, the spaces they're grouped into, and the
-/// webview backing each hot tab. Only tabs marked `Hot` have a live webview;
-/// `Hibernated` tabs are just metadata until they're activated again.
-pub struct TabManager(Mutex<Inner>);
+/// Owns tab state for every window, keyed by window label. Each window (the
+/// main one, and any private ones opened later) gets its own independent
+/// set of tabs/spaces - see `Inner`.
+#[derive(Default)]
+pub struct TabManager(Mutex<HashMap<String, Inner>>);
 
 impl TabManager {
     pub fn new() -> Self {
-        Self(Mutex::new(Inner::default()))
+        Self::default()
     }
+}
+
+/// Gets (lazily creating, for windows like "main" that aren't explicitly
+/// pre-registered) the tab state for `window`.
+fn inner_for<'a, R: Runtime>(
+    managers: &'a mut HashMap<String, Inner>,
+    window: &Window<R>,
+) -> &'a mut Inner {
+    managers.entry(window.label().to_string()).or_insert_with(Inner::default)
 }
 
 fn tab_label(id: &str) -> String {
@@ -244,16 +276,19 @@ fn split_bounds<R: Runtime>(
 
 /// Creates the webview backing a tab. If `scroll_y` is non-zero, injects a
 /// script that restores that scroll offset once the page's DOM is ready
-/// (used when waking a hibernated tab back up).
+/// (used when waking a hibernated tab back up). `incognito` gives the
+/// webview a non-persistent data store (no cookies/site data on disk) for
+/// tabs opened in a private window.
 fn spawn_webview<R: Runtime>(
     window: &Window<R>,
     label: &str,
     url: tauri::Url,
     scroll_y: f64,
     sidebar_visible: bool,
+    incognito: bool,
 ) -> tauri::Result<Webview<R>> {
     let (position, size) = content_bounds(window, sidebar_visible)?;
-    let mut builder = WebviewBuilder::new(label, WebviewUrl::External(url));
+    let mut builder = WebviewBuilder::new(label, WebviewUrl::External(url)).incognito(incognito);
     if scroll_y > 0.0 {
         builder = builder.initialization_script(format!(
             "window.addEventListener('DOMContentLoaded', function () {{ window.scrollTo(0, {scroll_y}); }});"
@@ -349,6 +384,7 @@ fn hibernate<R: Runtime>(app: &AppHandle<R>, entry: &mut TabEntry) {
 /// callers are expected to follow up with `sync_visible_webviews`.
 fn wake<R: Runtime>(window: &Window<R>, inner: &mut Inner, id: &str) -> Result<(), String> {
     let sidebar_visible = inner.sidebar_visible;
+    let is_private = inner.is_private;
     let entry = inner
         .tabs
         .iter_mut()
@@ -358,7 +394,8 @@ fn wake<R: Runtime>(window: &Window<R>, inner: &mut Inner, id: &str) -> Result<(
     if entry.status == TabStatus::Hibernated {
         let label = tab_label(id);
         let parsed: tauri::Url = entry.url.parse().map_err(|e| format!("invalid url: {e}"))?;
-        spawn_webview(window, &label, parsed, entry.scroll_y, sidebar_visible).map_err(|e| e.to_string())?;
+        spawn_webview(window, &label, parsed, entry.scroll_y, sidebar_visible, is_private)
+            .map_err(|e| e.to_string())?;
     }
     entry.status = TabStatus::Hot;
     entry.last_active_at = Instant::now();
@@ -406,13 +443,8 @@ fn group_tab_ids(inner: &Inner, group_id: &str) -> Vec<String> {
         .collect()
 }
 
-fn emit_tabs_changed<R: Runtime>(app: &AppHandle<R>, inner: &Inner) {
-    let _ = app.emit("tabs-changed", inner.snapshot());
-}
-
-fn main_window<R: Runtime>(app: &AppHandle<R>) -> Result<Window<R>, String> {
-    app.get_window(MAIN_WINDOW_LABEL)
-        .ok_or_else(|| "main window not found".to_string())
+fn emit_tabs_changed<R: Runtime>(app: &AppHandle<R>, window_label: &str, inner: &Inner) {
+    let _ = app.emit_to(EventTarget::webview(window_label), "tabs-changed", inner.snapshot());
 }
 
 /// Switches which space is "current": hides whatever the old space was
@@ -461,12 +493,12 @@ fn open_tab<R: Runtime>(
 ) -> Result<TabInfo, String> {
     let parsed = url.parse().map_err(|e| format!("invalid url: {e}"))?;
 
-    inner.next_id += 1;
-    let id = inner.next_id.to_string();
+    let id = (NEXT_TAB_ID.fetch_add(1, Ordering::Relaxed) + 1).to_string();
     let label = tab_label(&id);
     let group_id = inner.active_group_id.clone();
 
-    spawn_webview(window, &label, parsed, 0.0, inner.sidebar_visible).map_err(|e| e.to_string())?;
+    spawn_webview(window, &label, parsed, 0.0, inner.sidebar_visible, inner.is_private)
+        .map_err(|e| e.to_string())?;
 
     let (prev_active, prev_split) = {
         let group = inner.active_group();
@@ -506,29 +538,31 @@ fn open_tab<R: Runtime>(
 #[tauri::command]
 pub fn create_tab<R: Runtime>(
     app: AppHandle<R>,
+    window: Window<R>,
     manager: State<'_, TabManager>,
     url: Option<String>,
 ) -> Result<TabInfo, String> {
-    let window = main_window(&app)?;
     let url = url.unwrap_or_else(|| DEFAULT_TAB_URL.to_string());
 
-    let mut inner = manager.0.lock().unwrap();
-    let info = open_tab(&app, &window, &mut inner, url, DEFAULT_TAB_TITLE.to_string())?;
+    let mut managers = manager.0.lock().unwrap();
+    let inner = inner_for(&mut managers, &window);
+    let info = open_tab(&app, &window, inner, url, DEFAULT_TAB_TITLE.to_string())?;
 
-    sync_visible_webviews(&app, &window, &inner);
-    focus_active(&app, &inner);
-    emit_tabs_changed(&app, &inner);
+    sync_visible_webviews(&app, &window, inner);
+    focus_active(&app, inner);
+    emit_tabs_changed(&app, window.label(), inner);
     Ok(info)
 }
 
 #[tauri::command]
 pub fn activate_tab<R: Runtime>(
     app: AppHandle<R>,
+    window: Window<R>,
     manager: State<'_, TabManager>,
     id: String,
 ) -> Result<(), String> {
-    let window = main_window(&app)?;
-    let mut inner = manager.0.lock().unwrap();
+    let mut managers = manager.0.lock().unwrap();
+    let inner = inner_for(&mut managers, &window);
 
     let group_id = inner
         .tabs
@@ -538,7 +572,7 @@ pub fn activate_tab<R: Runtime>(
         .ok_or_else(|| format!("no such tab: {id}"))?;
 
     if inner.active_group_id != group_id {
-        switch_to_group(&app, &window, &mut inner, &group_id)?;
+        switch_to_group(&app, &window, inner, &group_id)?;
     }
 
     let already_sole_active = {
@@ -561,30 +595,31 @@ pub fn activate_tab<R: Runtime>(
             hide_tab(&app, &tab_label(&prev_split)).map_err(|e| e.to_string())?;
         }
 
-        wake(&window, &mut inner, &id)?;
+        wake(&window, inner, &id)?;
         {
             let group = inner.active_group_mut();
             group.active_id = Some(id.clone());
             group.split_id = None;
         }
-        let keep = visible_ids(&inner);
-        enforce_hot_cap(&app, &mut inner, &keep);
+        let keep = visible_ids(inner);
+        enforce_hot_cap(&app, inner, &keep);
     }
 
-    sync_visible_webviews(&app, &window, &inner);
-    focus_active(&app, &inner);
-    emit_tabs_changed(&app, &inner);
+    sync_visible_webviews(&app, &window, inner);
+    focus_active(&app, inner);
+    emit_tabs_changed(&app, window.label(), inner);
     Ok(())
 }
 
 #[tauri::command]
 pub fn close_tab<R: Runtime>(
     app: AppHandle<R>,
+    window: Window<R>,
     manager: State<'_, TabManager>,
     id: String,
 ) -> Result<(), String> {
-    let window = main_window(&app)?;
-    let mut inner = manager.0.lock().unwrap();
+    let mut managers = manager.0.lock().unwrap();
+    let inner = inner_for(&mut managers, &window);
 
     let index = inner
         .tabs
@@ -598,13 +633,15 @@ pub fn close_tab<R: Runtime>(
         webview.close().map_err(|e| e.to_string())?;
     }
     let closed = inner.tabs.remove(index);
-    inner.closed_stack.push(ClosedTab {
-        url: closed.url,
-        title: closed.title,
-        group_id: closed.group_id,
-    });
-    if inner.closed_stack.len() > CLOSED_STACK_CAP {
-        inner.closed_stack.remove(0);
+    if !inner.is_private {
+        inner.closed_stack.push(ClosedTab {
+            url: closed.url,
+            title: closed.title,
+            group_id: closed.group_id,
+        });
+        if inner.closed_stack.len() > CLOSED_STACK_CAP {
+            inner.closed_stack.remove(0);
+        }
     }
 
     let was_split = inner.group(&group_id).and_then(|g| g.split_id.as_deref()) == Some(id.as_str());
@@ -618,33 +655,34 @@ pub fn close_tab<R: Runtime>(
         // tab to active instead of guessing at a neighbor.
         let promoted = inner.group_mut(&group_id).unwrap().split_id.take();
         if let Some(promoted) = promoted {
-            wake(&window, &mut inner, &promoted)?;
+            wake(&window, inner, &promoted)?;
             inner.group_mut(&group_id).unwrap().active_id = Some(promoted);
         } else {
-            let siblings = group_tab_ids(&inner, &group_id);
+            let siblings = group_tab_ids(inner, &group_id);
             let next_id = siblings
                 .get(group_index)
                 .or_else(|| group_index.checked_sub(1).and_then(|i| siblings.get(i)))
                 .cloned();
             inner.group_mut(&group_id).unwrap().active_id = next_id.clone();
             if let Some(next_id) = &next_id {
-                wake(&window, &mut inner, next_id)?;
+                wake(&window, inner, next_id)?;
             }
         }
     }
 
-    let keep = visible_ids(&inner);
-    enforce_hot_cap(&app, &mut inner, &keep);
+    let keep = visible_ids(inner);
+    enforce_hot_cap(&app, inner, &keep);
 
-    sync_visible_webviews(&app, &window, &inner);
-    focus_active(&app, &inner);
-    emit_tabs_changed(&app, &inner);
+    sync_visible_webviews(&app, &window, inner);
+    focus_active(&app, inner);
+    emit_tabs_changed(&app, window.label(), inner);
     Ok(())
 }
 
 #[tauri::command]
-pub fn list_tabs(manager: State<'_, TabManager>) -> TabsChangedPayload {
-    manager.0.lock().unwrap().snapshot()
+pub fn list_tabs<R: Runtime>(window: Window<R>, manager: State<'_, TabManager>) -> TabsChangedPayload {
+    let mut managers = manager.0.lock().unwrap();
+    inner_for(&mut managers, &window).snapshot()
 }
 
 /// Moves the tab to `to_index` *within its own space* - `to_index` is
@@ -655,11 +693,14 @@ pub fn list_tabs(manager: State<'_, TabManager>) -> TabsChangedPayload {
 #[tauri::command]
 pub fn reorder_tab<R: Runtime>(
     app: AppHandle<R>,
+    window: Window<R>,
     manager: State<'_, TabManager>,
     id: String,
     to_index: usize,
 ) -> Result<(), String> {
-    let mut inner = manager.0.lock().unwrap();
+    let mut managers = manager.0.lock().unwrap();
+    let inner = inner_for(&mut managers, &window);
+
     let from = inner
         .tabs
         .iter()
@@ -680,7 +721,7 @@ pub fn reorder_tab<R: Runtime>(
     let entry = inner.tabs.remove(from);
     inner.tabs.insert(insert_at, entry);
 
-    emit_tabs_changed(&app, &inner);
+    emit_tabs_changed(&app, window.label(), inner);
     Ok(())
 }
 
@@ -777,6 +818,7 @@ fn derive_title(url: &tauri::Url) -> String {
 #[tauri::command]
 pub fn navigate_tab<R: Runtime>(
     app: AppHandle<R>,
+    window: Window<R>,
     manager: State<'_, TabManager>,
     id: String,
     url: String,
@@ -785,7 +827,8 @@ pub fn navigate_tab<R: Runtime>(
         .parse()
         .map_err(|e| format!("invalid url: {e}"))?;
 
-    let mut inner = manager.0.lock().unwrap();
+    let mut managers = manager.0.lock().unwrap();
+    let inner = inner_for(&mut managers, &window);
     let entry = inner
         .tabs
         .iter_mut()
@@ -803,7 +846,7 @@ pub fn navigate_tab<R: Runtime>(
     }
 
     let info = entry.to_info();
-    emit_tabs_changed(&app, &inner);
+    emit_tabs_changed(&app, window.label(), inner);
     Ok(info)
 }
 
@@ -814,19 +857,20 @@ pub fn navigate_tab<R: Runtime>(
 #[tauri::command]
 pub fn set_overlay_active<R: Runtime>(
     app: AppHandle<R>,
+    window: Window<R>,
     manager: State<'_, TabManager>,
     open: bool,
 ) -> Result<(), String> {
-    let window = main_window(&app)?;
-    let inner = manager.0.lock().unwrap();
+    let mut managers = manager.0.lock().unwrap();
+    let inner = inner_for(&mut managers, &window);
     if open {
-        for id in visible_ids(&inner) {
+        for id in visible_ids(inner) {
             hide_tab(&app, &tab_label(&id)).map_err(|e| e.to_string())?;
         }
         Ok(())
     } else {
-        sync_visible_webviews(&app, &window, &inner);
-        focus_active(&app, &inner);
+        sync_visible_webviews(&app, &window, inner);
+        focus_active(&app, inner);
         Ok(())
     }
 }
@@ -837,11 +881,12 @@ pub fn set_overlay_active<R: Runtime>(
 #[tauri::command]
 pub fn set_split<R: Runtime>(
     app: AppHandle<R>,
+    window: Window<R>,
     manager: State<'_, TabManager>,
     id: Option<String>,
 ) -> Result<(), String> {
-    let window = main_window(&app)?;
-    let mut inner = manager.0.lock().unwrap();
+    let mut managers = manager.0.lock().unwrap();
+    let inner = inner_for(&mut managers, &window);
 
     if let Some(target) = &id {
         match inner.tabs.iter().find(|t| &t.id == target) {
@@ -864,16 +909,16 @@ pub fn set_split<R: Runtime>(
     }
 
     if let Some(target) = &id {
-        wake(&window, &mut inner, target)?;
+        wake(&window, inner, target)?;
     }
     inner.active_group_mut().split_id = id;
 
-    let keep = visible_ids(&inner);
-    enforce_hot_cap(&app, &mut inner, &keep);
+    let keep = visible_ids(inner);
+    enforce_hot_cap(&app, inner, &keep);
 
-    sync_visible_webviews(&app, &window, &inner);
-    focus_active(&app, &inner);
-    emit_tabs_changed(&app, &inner);
+    sync_visible_webviews(&app, &window, inner);
+    focus_active(&app, inner);
+    emit_tabs_changed(&app, window.label(), inner);
     Ok(())
 }
 
@@ -881,11 +926,12 @@ pub fn set_split<R: Runtime>(
 #[tauri::command]
 pub fn create_group<R: Runtime>(
     app: AppHandle<R>,
+    window: Window<R>,
     manager: State<'_, TabManager>,
     name: Option<String>,
 ) -> Result<GroupInfo, String> {
-    let window = main_window(&app)?;
-    let mut inner = manager.0.lock().unwrap();
+    let mut managers = manager.0.lock().unwrap();
+    let inner = inner_for(&mut managers, &window);
 
     inner.next_group_id += 1;
     let id = inner.next_group_id.to_string();
@@ -897,11 +943,11 @@ pub fn create_group<R: Runtime>(
         split_id: None,
     });
 
-    switch_to_group(&app, &window, &mut inner, &id)?;
+    switch_to_group(&app, &window, inner, &id)?;
 
-    sync_visible_webviews(&app, &window, &inner);
-    focus_active(&app, &inner);
-    emit_tabs_changed(&app, &inner);
+    sync_visible_webviews(&app, &window, inner);
+    focus_active(&app, inner);
+    emit_tabs_changed(&app, window.label(), inner);
     Ok(GroupInfo { id, name })
 }
 
@@ -909,17 +955,18 @@ pub fn create_group<R: Runtime>(
 #[tauri::command]
 pub fn switch_group<R: Runtime>(
     app: AppHandle<R>,
+    window: Window<R>,
     manager: State<'_, TabManager>,
     id: String,
 ) -> Result<(), String> {
-    let window = main_window(&app)?;
-    let mut inner = manager.0.lock().unwrap();
+    let mut managers = manager.0.lock().unwrap();
+    let inner = inner_for(&mut managers, &window);
 
-    switch_to_group(&app, &window, &mut inner, &id)?;
+    switch_to_group(&app, &window, inner, &id)?;
 
-    sync_visible_webviews(&app, &window, &inner);
-    focus_active(&app, &inner);
-    emit_tabs_changed(&app, &inner);
+    sync_visible_webviews(&app, &window, inner);
+    focus_active(&app, inner);
+    emit_tabs_changed(&app, window.label(), inner);
     Ok(())
 }
 
@@ -928,11 +975,12 @@ pub fn switch_group<R: Runtime>(
 #[tauri::command]
 pub fn close_group<R: Runtime>(
     app: AppHandle<R>,
+    window: Window<R>,
     manager: State<'_, TabManager>,
     id: String,
 ) -> Result<(), String> {
-    let window = main_window(&app)?;
-    let mut inner = manager.0.lock().unwrap();
+    let mut managers = manager.0.lock().unwrap();
+    let inner = inner_for(&mut managers, &window);
 
     if !inner.groups.iter().any(|g| g.id == id) {
         return Err(format!("no such space: {id}"));
@@ -941,7 +989,7 @@ pub fn close_group<R: Runtime>(
         return Err("cannot close the last space".to_string());
     }
 
-    let doomed = group_tab_ids(&inner, &id);
+    let doomed = group_tab_ids(inner, &id);
     for tab_id in &doomed {
         if let Some(webview) = app.get_webview(&tab_label(tab_id)) {
             webview.close().map_err(|e| e.to_string())?;
@@ -964,16 +1012,16 @@ pub fn close_group<R: Runtime>(
             group.active_id.iter().chain(group.split_id.iter()).cloned().collect()
         };
         for tab_id in to_wake {
-            wake(&window, &mut inner, &tab_id)?;
+            wake(&window, inner, &tab_id)?;
         }
     }
 
-    let keep = visible_ids(&inner);
-    enforce_hot_cap(&app, &mut inner, &keep);
+    let keep = visible_ids(inner);
+    enforce_hot_cap(&app, inner, &keep);
 
-    sync_visible_webviews(&app, &window, &inner);
-    focus_active(&app, &inner);
-    emit_tabs_changed(&app, &inner);
+    sync_visible_webviews(&app, &window, inner);
+    focus_active(&app, inner);
+    emit_tabs_changed(&app, window.label(), inner);
     Ok(())
 }
 
@@ -981,11 +1029,14 @@ pub fn close_group<R: Runtime>(
 #[tauri::command]
 pub fn rename_group<R: Runtime>(
     app: AppHandle<R>,
+    window: Window<R>,
     manager: State<'_, TabManager>,
     id: String,
     name: String,
 ) -> Result<(), String> {
-    let mut inner = manager.0.lock().unwrap();
+    let mut managers = manager.0.lock().unwrap();
+    let inner = inner_for(&mut managers, &window);
+
     let name = name.trim();
     if name.is_empty() {
         return Err("space name cannot be empty".to_string());
@@ -995,7 +1046,7 @@ pub fn rename_group<R: Runtime>(
         .group_mut(&id)
         .ok_or_else(|| format!("no such space: {id}"))?
         .name = name;
-    emit_tabs_changed(&app, &inner);
+    emit_tabs_changed(&app, window.label(), inner);
     Ok(())
 }
 
@@ -1005,10 +1056,11 @@ pub fn rename_group<R: Runtime>(
 #[tauri::command]
 pub fn reopen_closed_tab<R: Runtime>(
     app: AppHandle<R>,
+    window: Window<R>,
     manager: State<'_, TabManager>,
 ) -> Result<Option<TabInfo>, String> {
-    let window = main_window(&app)?;
-    let mut inner = manager.0.lock().unwrap();
+    let mut managers = manager.0.lock().unwrap();
+    let inner = inner_for(&mut managers, &window);
 
     let Some(closed) = inner.closed_stack.pop() else {
         return Ok(None);
@@ -1020,14 +1072,14 @@ pub fn reopen_closed_tab<R: Runtime>(
         inner.active_group_id.clone()
     };
     if inner.active_group_id != group_id {
-        switch_to_group(&app, &window, &mut inner, &group_id)?;
+        switch_to_group(&app, &window, inner, &group_id)?;
     }
 
-    let info = open_tab(&app, &window, &mut inner, closed.url, closed.title)?;
+    let info = open_tab(&app, &window, inner, closed.url, closed.title)?;
 
-    sync_visible_webviews(&app, &window, &inner);
-    focus_active(&app, &inner);
-    emit_tabs_changed(&app, &inner);
+    sync_visible_webviews(&app, &window, inner);
+    focus_active(&app, inner);
+    emit_tabs_changed(&app, window.label(), inner);
     Ok(Some(info))
 }
 
@@ -1037,13 +1089,14 @@ pub fn reopen_closed_tab<R: Runtime>(
 #[tauri::command]
 pub fn toggle_sidebar<R: Runtime>(
     app: AppHandle<R>,
+    window: Window<R>,
     manager: State<'_, TabManager>,
 ) -> Result<bool, String> {
-    let window = main_window(&app)?;
-    let mut inner = manager.0.lock().unwrap();
+    let mut managers = manager.0.lock().unwrap();
+    let inner = inner_for(&mut managers, &window);
     inner.sidebar_visible = !inner.sidebar_visible;
-    sync_visible_webviews(&app, &window, &inner);
-    emit_tabs_changed(&app, &inner);
+    sync_visible_webviews(&app, &window, inner);
+    emit_tabs_changed(&app, window.label(), inner);
     Ok(inner.sidebar_visible)
 }
 
@@ -1054,13 +1107,14 @@ pub fn toggle_sidebar<R: Runtime>(
 #[tauri::command]
 pub fn find_in_page<R: Runtime>(
     app: AppHandle<R>,
+    window: Window<R>,
     manager: State<'_, TabManager>,
     query: String,
     backwards: bool,
 ) -> Result<(), String> {
     let active_id = {
-        let inner = manager.0.lock().unwrap();
-        inner.active_group().active_id.clone()
+        let mut managers = manager.0.lock().unwrap();
+        inner_for(&mut managers, &window).active_group().active_id.clone()
     };
     let Some(active_id) = active_id else {
         return Ok(());
@@ -1079,57 +1133,90 @@ pub fn find_in_page<R: Runtime>(
     webview.eval(js).map_err(|e| e.to_string())
 }
 
-/// Keeps the visible webview(s) sized to fill the window whenever it
+static PRIVATE_WINDOW_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Opens a new private window: a completely separate window with its own
+/// tabs/spaces, whose tab webviews use a non-persistent data store (no
+/// cookies or site data on disk) and whose closed tabs aren't remembered
+/// for reopening. The frontend is responsible for skipping history and
+/// bookmark writes there (see the `isPrivate` field in `TabsChangedPayload`).
+#[tauri::command]
+pub fn open_private_window<R: Runtime>(app: AppHandle<R>, manager: State<'_, TabManager>) -> Result<(), String> {
+    let n = PRIVATE_WINDOW_COUNTER.fetch_add(1, Ordering::Relaxed) + 1;
+    let label = format!("private-{n}");
+
+    let webview_window = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html".into()))
+        .title("twig — Private")
+        .inner_size(1200.0, 800.0)
+        .build()
+        .map_err(|e| e.to_string())?;
+    let window = AsRef::<Webview<R>>::as_ref(&webview_window).window();
+
+    manager.0.lock().unwrap().insert(label, Inner::new_private());
+    watch_window(&app, &window);
+
+    Ok(())
+}
+
+/// Keeps a window's visible webview(s) sized to fill it whenever it
 /// resizes (hidden tabs are repositioned lazily when they next become
-/// visible instead).
-pub fn watch_window_resize<R: Runtime>(app: &AppHandle<R>) {
-    let Some(window) = app.get_window(MAIN_WINDOW_LABEL) else {
-        return;
-    };
+/// visible instead), and cleans up its tab state when it closes. Call once
+/// per window - at startup for the main window, and right after creating
+/// each private one.
+pub fn watch_window<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) {
     let app_handle = app.clone();
-    window.on_window_event(move |event| {
-        let WindowEvent::Resized(_) = event else {
-            return;
-        };
-        let manager = app_handle.state::<TabManager>();
-        let inner = manager.0.lock().unwrap();
-        let Some(window) = app_handle.get_window(MAIN_WINDOW_LABEL) else {
-            return;
-        };
-        sync_visible_webviews(&app_handle, &window, &inner);
+    let label = window.label().to_string();
+    window.on_window_event(move |event| match event {
+        WindowEvent::Resized(_) => {
+            let manager = app_handle.state::<TabManager>();
+            let managers = manager.0.lock().unwrap();
+            let (Some(inner), Some(window)) =
+                (managers.get(&label), app_handle.get_window(&label))
+            else {
+                return;
+            };
+            sync_visible_webviews(&app_handle, &window, inner);
+        }
+        WindowEvent::Destroyed => {
+            let manager = app_handle.state::<TabManager>();
+            manager.0.lock().unwrap().remove(&label);
+        }
+        _ => {}
     });
 }
 
-/// Background sweep that hibernates hot tabs outside the current space's
-/// view once they've sat idle longer than `HIBERNATE_AFTER`. Runs for the
-/// lifetime of the app.
+/// Background sweep that hibernates hot tabs outside each window's current
+/// space once they've sat idle longer than `HIBERNATE_AFTER`. Runs for the
+/// lifetime of the app, across every open window.
 pub fn watch_idle_tabs<R: Runtime>(app: &AppHandle<R>) {
     let app_handle = app.clone();
     std::thread::spawn(move || loop {
         std::thread::sleep(IDLE_SWEEP_INTERVAL);
 
         let manager = app_handle.state::<TabManager>();
-        let mut inner = manager.0.lock().unwrap();
-        let visible = visible_ids(&inner);
+        let mut managers = manager.0.lock().unwrap();
         let now = Instant::now();
 
-        let stale: Vec<String> = inner
-            .tabs
-            .iter()
-            .filter(|t| t.status == TabStatus::Hot)
-            .filter(|t| !visible.contains(&t.id))
-            .filter(|t| now.duration_since(t.last_active_at) > HIBERNATE_AFTER)
-            .map(|t| t.id.clone())
-            .collect();
+        for (label, inner) in managers.iter_mut() {
+            let visible = visible_ids(inner);
+            let stale: Vec<String> = inner
+                .tabs
+                .iter()
+                .filter(|t| t.status == TabStatus::Hot)
+                .filter(|t| !visible.contains(&t.id))
+                .filter(|t| now.duration_since(t.last_active_at) > HIBERNATE_AFTER)
+                .map(|t| t.id.clone())
+                .collect();
 
-        if stale.is_empty() {
-            continue;
-        }
-        for id in &stale {
-            if let Some(entry) = inner.tabs.iter_mut().find(|t| &t.id == id) {
-                hibernate(&app_handle, entry);
+            if stale.is_empty() {
+                continue;
             }
+            for id in &stale {
+                if let Some(entry) = inner.tabs.iter_mut().find(|t| &t.id == id) {
+                    hibernate(&app_handle, entry);
+                }
+            }
+            emit_tabs_changed(&app_handle, label, inner);
         }
-        emit_tabs_changed(&app_handle, &inner);
     });
 }
