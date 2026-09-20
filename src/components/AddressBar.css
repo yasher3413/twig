@@ -1,0 +1,59 @@
+/* Height must match TOP_BAR_HEIGHT in src-tauri/src/tabs.rs. */
+.address-bar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.nav-button {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.nav-button:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+.address-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  margin-left: 6px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--row-hover);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.address-input:focus {
+  background: var(--bg);
+  border-color: var(--border);
+}
+
+.address-input::placeholder {
+  color: var(--text-muted);
+}

@@ -88,3 +88,15 @@ export function findInPage(query: string, backwards: boolean): Promise<void> {
 export function openPrivateWindow(): Promise<void> {
   return invoke("open_private_window");
 }
+
+export function goBack(id: string): Promise<void> {
+  return invoke("go_back", { id });
+}
+
+export function goForward(id: string): Promise<void> {
+  return invoke("go_forward", { id });
+}
+
+export function reloadTab(id: string): Promise<void> {
+  return invoke("reload_tab", { id });
+}

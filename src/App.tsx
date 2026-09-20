@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Sidebar } from "./components/Sidebar";
+import { AddressBar } from "./components/AddressBar";
 import { CommandPalette } from "./components/CommandPalette";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { useTabStore } from "./store/tabs";
@@ -48,6 +49,7 @@ function App() {
   return (
     <>
       <Sidebar />
+      <AddressBar />
       <CommandPalette />
       <SettingsPanel />
     </>

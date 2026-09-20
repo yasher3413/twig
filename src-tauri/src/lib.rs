@@ -145,6 +145,9 @@ pub fn run() {
             tabs::toggle_sidebar,
             tabs::find_in_page,
             tabs::open_private_window,
+            tabs::go_back,
+            tabs::go_forward,
+            tabs::reload_tab,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
