@@ -18,7 +18,7 @@ import {
   type Tab,
   type TabsChangedPayload,
 } from "../lib/tabs";
-import { recordVisit } from "../lib/db";
+import { archiveTab, recordVisit } from "../lib/db";
 
 interface TabStore {
   tabs: Tab[];
@@ -82,6 +82,10 @@ export const useTabStore = create<TabStore>((set, get) => {
       await activateTab(id);
     },
     async close(id) {
+      // Archive before closing, while the tab's url and title are still
+      // known - afterwards there's nothing left to record.
+      const tab = get().tabs.find((t) => t.id === id);
+      if (tab && !get().isPrivate) await archiveTab(tab.url, tab.title).catch(() => {});
       await closeTab(id);
     },
     async reorder(id, toIndex) {

@@ -51,6 +51,18 @@ fn migrations() -> Vec<Migration> {
             );",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 4,
+            description: "archive of closed tabs",
+            sql: "CREATE TABLE archive (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT NOT NULL,
+                title TEXT NOT NULL,
+                closed_at INTEGER NOT NULL
+            );
+            CREATE INDEX idx_archive_closed_at ON archive(closed_at);",
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

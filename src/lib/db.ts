@@ -163,6 +163,41 @@ export async function clearHistory(): Promise<void> {
   await clearPageIndex();
 }
 
+export interface ArchivedTab {
+  id: number;
+  url: string;
+  title: string;
+  closedAt: number;
+}
+
+/** Keeps a closed tab so it can be found again later. The reopen stack
+ *  only holds the last 20 and dies with the process; this doesn't. */
+export async function archiveTab(url: string, title: string): Promise<void> {
+  if (!url || isInternalUrl(url)) return;
+  await db.execute("DELETE FROM archive WHERE url = $1", [url]);
+  await db.execute("INSERT INTO archive (url, title, closed_at) VALUES ($1, $2, $3)", [
+    url,
+    title,
+    Date.now(),
+  ]);
+}
+
+export async function searchArchive(query: string, limit = 300): Promise<ArchivedTab[]> {
+  const like = `%${query}%`;
+  const rows = await db.select<{ id: number; url: string; title: string; closed_at: number }[]>(
+    `SELECT id, url, title, closed_at FROM archive
+     WHERE url LIKE $1 OR title LIKE $1
+     ORDER BY closed_at DESC
+     LIMIT $2`,
+    [like, limit],
+  );
+  return rows.map((r) => ({ id: r.id, url: r.url, title: r.title, closedAt: r.closed_at }));
+}
+
+export async function deleteArchiveUrl(url: string): Promise<void> {
+  await db.execute("DELETE FROM archive WHERE url = $1", [url]);
+}
+
 export async function addBookmark(url: string, title: string): Promise<void> {
   await db.execute(
     "INSERT INTO bookmarks (url, title, created_at) VALUES ($1, $2, $3) ON CONFLICT(url) DO NOTHING",

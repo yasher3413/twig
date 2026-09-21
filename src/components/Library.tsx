@@ -3,10 +3,13 @@ import { listen } from "@tauri-apps/api/event";
 import { useTabStore } from "../store/tabs";
 import { setOverlayActive } from "../lib/tabs";
 import {
+  deleteArchiveUrl,
   deleteHistoryUrl,
   removeBookmark,
+  searchArchive,
   searchBookmarks,
   searchHistory,
+  type ArchivedTab,
   type Bookmark,
   type HistoryEntry,
 } from "../lib/db";
@@ -14,7 +17,7 @@ import { Icon } from "./Icon";
 import { SiteMark, hostOf } from "./SiteMark";
 import "./Library.css";
 
-type Shelf = "bookmarks" | "history";
+type Shelf = "bookmarks" | "history" | "archive";
 
 interface Row {
   key: string;
@@ -31,9 +34,9 @@ function whenever(ms: number): string {
   return new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-// Bookmarks and history are the same shape of thing - a list of pages you
-// want to get back to - so they share one surface rather than two panels
-// that would have been near-identical.
+// Bookmarks, history and closed tabs are the same shape of thing - a list
+// of pages worth getting back to - so they share one surface rather than
+// three panels that would have been near-identical.
 export function Library() {
   const { newTab } = useTabStore();
   const [open, setOpen] = useState(false);
@@ -78,6 +81,16 @@ export function Library() {
           title: m.title || hostOf(m.url),
         })),
       );
+    } else if (shelf === "archive") {
+      const closed: ArchivedTab[] = await searchArchive(query.trim(), 300);
+      setRows(
+        closed.map((c) => ({
+          key: `a-${c.id}`,
+          url: c.url,
+          title: c.title || hostOf(c.url),
+          meta: whenever(c.closedAt),
+        })),
+      );
     } else {
       const entries: HistoryEntry[] = await searchHistory(query.trim(), 300);
       setRows(
@@ -99,6 +112,7 @@ export function Library() {
 
   async function forget(url: string) {
     if (shelf === "bookmarks") await removeBookmark(url);
+    else if (shelf === "archive") await deleteArchiveUrl(url);
     else await deleteHistoryUrl(url);
     load();
   }
@@ -120,6 +134,12 @@ export function Library() {
             >
               History
             </button>
+            <button
+              className={shelf === "archive" ? "segment selected" : "segment"}
+              onClick={() => setShelf("archive")}
+            >
+              Closed
+            </button>
           </div>
 
           <div className="library-search">
@@ -128,7 +148,13 @@ export function Library() {
               autoFocus
               value={query}
               spellCheck={false}
-              placeholder={shelf === "bookmarks" ? "Search bookmarks" : "Search history"}
+              placeholder={
+                shelf === "bookmarks"
+                  ? "Search bookmarks"
+                  : shelf === "archive"
+                    ? "Search closed tabs"
+                    : "Search history"
+              }
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
@@ -145,7 +171,9 @@ export function Library() {
                 ? `Nothing matching “${query}”.`
                 : shelf === "bookmarks"
                   ? "No bookmarks yet — ⌘D keeps the page you're on."
-                  : "No history yet."}
+                  : shelf === "archive"
+                    ? "Nothing closed yet. Tabs you close end up here."
+                    : "No history yet."}
             </p>
           )}
 
