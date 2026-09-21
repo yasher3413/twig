@@ -48,6 +48,14 @@ const CLOSED_STACK_CAP: usize = 20;
 pub const MAIN_WINDOW_LABEL: &str = "main";
 const DEFAULT_TAB_TITLE: &str = "New Tab";
 
+/// WKWebView's default user agent stops after the AppleWebKit token, with
+/// no `Version/… Safari/…` product after it. Sites read that shape as an
+/// app embedding a webview rather than a browser: Google serves its no-JS
+/// fallback page to it and refuses to let you sign in at all. We render
+/// with WebKit, so presenting as Safari is accurate rather than a spoof.
+const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
+    AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15";
+
 /// Tab ids double as webview labels, which must be unique across the whole
 /// app - not just within one window - so this is a single shared counter
 /// rather than a per-window one.
@@ -348,6 +356,7 @@ fn spawn_webview<R: Runtime>(
     };
     let mut builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
         .incognito(incognito)
+        .user_agent(USER_AGENT)
         .background_color(backdrop)
         .on_navigation(move |url| {
             // Keeps our stored URL (and the address bar) in sync with
