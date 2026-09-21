@@ -196,6 +196,7 @@ pub fn run() {
                 .get_window(tabs::MAIN_WINDOW_LABEL)
                 .expect("main window declared in tauri.conf.json must exist");
             tabs::watch_window(app.handle(), &main_window);
+            tabs::restore_session(app.handle(), &main_window);
             tabs::watch_idle_tabs(app.handle());
             Ok(())
         })

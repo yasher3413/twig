@@ -4,7 +4,7 @@ use std::sync::mpsc;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{
     webview::Color, AppHandle, Emitter, EventTarget, LogicalPosition, LogicalSize, Manager,
     Runtime, State, Theme, Webview, WebviewBuilder, WebviewUrl, WebviewWindowBuilder, Window,
@@ -547,6 +547,11 @@ fn group_tab_ids(inner: &Inner, group_id: &str) -> Vec<String> {
 
 fn emit_tabs_changed<R: Runtime>(app: &AppHandle<R>, window_label: &str, inner: &Inner) {
     let _ = app.emit_to(EventTarget::webview(window_label), "tabs-changed", inner.snapshot());
+    // Any change to the main window's tabs is a change worth surviving a
+    // quit. Private windows are deliberately never written down.
+    if window_label == MAIN_WINDOW_LABEL && !inner.is_private {
+        save_session(app, inner);
+    }
 }
 
 /// Switches which space is "current": hides whatever the old space was
@@ -1396,6 +1401,169 @@ pub fn clear_site_data<R: Runtime>(
         }
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------
+// Session persistence
+//
+// Restoring is cheap for the same reason hibernating is: a tab is a row,
+// not a webview. Everything comes back Hibernated and only the tab you
+// were last looking at gets a webview, so reopening a few hundred tabs
+// costs about as much as reopening one.
+// ---------------------------------------------------------------------
+
+#[derive(Serialize, Deserialize)]
+struct PersistedTab {
+    id: String,
+    url: String,
+    title: String,
+    scroll_y: f64,
+    group_id: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct PersistedGroup {
+    id: String,
+    name: String,
+    active_id: Option<String>,
+    split_id: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct PersistedSession {
+    tabs: Vec<PersistedTab>,
+    groups: Vec<PersistedGroup>,
+    active_group_id: String,
+    next_group_id: u64,
+    tab_strip_visible: bool,
+}
+
+fn session_path<R: Runtime>(app: &AppHandle<R>) -> Option<std::path::PathBuf> {
+    let dir = app.path().app_data_dir().ok()?;
+    let _ = std::fs::create_dir_all(&dir);
+    Some(dir.join("session.json"))
+}
+
+fn save_session<R: Runtime>(app: &AppHandle<R>, inner: &Inner) {
+    let Some(path) = session_path(app) else {
+        return;
+    };
+    let session = PersistedSession {
+        tabs: inner
+            .tabs
+            .iter()
+            .map(|t| PersistedTab {
+                id: t.id.clone(),
+                url: t.url.clone(),
+                title: t.title.clone(),
+                scroll_y: t.scroll_y,
+                group_id: t.group_id.clone(),
+            })
+            .collect(),
+        groups: inner
+            .groups
+            .iter()
+            .map(|g| PersistedGroup {
+                id: g.id.clone(),
+                name: g.name.clone(),
+                active_id: g.active_id.clone(),
+                split_id: g.split_id.clone(),
+            })
+            .collect(),
+        active_group_id: inner.active_group_id.clone(),
+        next_group_id: inner.next_group_id,
+        tab_strip_visible: inner.tab_strip_visible,
+    };
+    if let Ok(json) = serde_json::to_string(&session) {
+        let _ = std::fs::write(path, json);
+    }
+}
+
+/// Rebuilds last session's tabs and spaces, then wakes only the tab that
+/// was active. Everything else stays a row until you touch it.
+pub fn restore_session<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) {
+    let Some(path) = session_path(app) else {
+        return;
+    };
+    let Ok(raw) = std::fs::read_to_string(&path) else {
+        return;
+    };
+    let Ok(session) = serde_json::from_str::<PersistedSession>(&raw) else {
+        return;
+    };
+    if session.tabs.is_empty() {
+        return;
+    }
+
+    // Tab ids double as webview labels app-wide, so the counter has to
+    // clear everything we just restored or the next new tab collides.
+    let highest = session
+        .tabs
+        .iter()
+        .filter_map(|t| t.id.parse::<u64>().ok())
+        .max()
+        .unwrap_or(0);
+    NEXT_TAB_ID.fetch_max(highest, Ordering::Relaxed);
+
+    let manager = app.state::<TabManager>();
+    let mut managers = manager.0.lock().unwrap();
+    let inner = inner_for(&mut managers, window);
+
+    inner.tabs = session
+        .tabs
+        .into_iter()
+        .map(|t| TabEntry {
+            id: t.id,
+            url: t.url,
+            title: t.title,
+            status: TabStatus::Hibernated,
+            last_active_at: Instant::now(),
+            scroll_y: t.scroll_y,
+            group_id: t.group_id,
+        })
+        .collect();
+    inner.groups = session
+        .groups
+        .into_iter()
+        .map(|g| Group {
+            id: g.id,
+            name: g.name,
+            active_id: g.active_id,
+            split_id: g.split_id,
+        })
+        .collect();
+    if inner.groups.is_empty() {
+        inner.groups.push(Group {
+            id: "1".to_string(),
+            name: "Space 1".to_string(),
+            active_id: None,
+            split_id: None,
+        });
+    }
+    inner.active_group_id = if inner.groups.iter().any(|g| g.id == session.active_group_id) {
+        session.active_group_id
+    } else {
+        inner.groups[0].id.clone()
+    };
+    inner.next_group_id = session.next_group_id.max(inner.groups.len() as u64);
+    inner.tab_strip_visible = session.tab_strip_visible;
+
+    // Split partners aren't restored: that would mean two live webviews
+    // before you've asked for either.
+    let active_id = {
+        let group = inner.active_group_mut();
+        group.split_id = None;
+        group.active_id.clone()
+    };
+
+    if let Some(id) = active_id {
+        if inner.tabs.iter().any(|t| t.id == id) {
+            let _ = wake(app, window, inner, &id);
+        }
+    }
+    sync_visible_webviews(app, window, inner);
+    focus_active(app, inner);
+    emit_tabs_changed(app, window.label(), inner);
 }
 
 /// Keeps a window's visible webview(s) sized to fill it whenever it
