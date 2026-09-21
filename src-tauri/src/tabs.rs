@@ -56,6 +56,55 @@ const DEFAULT_TAB_TITLE: &str = "New Tab";
 const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
     AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15";
 
+/// Injected into every tab so hibernation can ask "would tearing this down
+/// lose something?" before it does. A tab counts as busy if it has typing
+/// in it that hasn't been submitted, is playing audio or video, or holds a
+/// live camera/mic track - the three cases where reclaiming memory would
+/// cost the user real work instead of nothing.
+const BUSY_TRACKER: &str = r#"(function () {
+  if (window.__twigBusyReady) return;
+  window.__twigBusyReady = true;
+  var dirty = false;
+  var streams = [];
+  try {
+    document.addEventListener('input', function (e) {
+      var t = e.target;
+      if (!t) return;
+      if (t.isContentEditable || (t.matches && t.matches('input,textarea,select'))) dirty = true;
+    }, true);
+    document.addEventListener('submit', function () { dirty = false; }, true);
+  } catch (e) {}
+  try {
+    var md = navigator.mediaDevices;
+    if (md && md.getUserMedia) {
+      var orig = md.getUserMedia.bind(md);
+      md.getUserMedia = function () {
+        return orig.apply(null, arguments).then(function (s) { streams.push(s); return s; });
+      };
+    }
+  } catch (e) {}
+  function playing() {
+    try {
+      var els = document.querySelectorAll('video,audio');
+      for (var i = 0; i < els.length; i++) {
+        var m = els[i];
+        if (!m.paused && !m.ended && m.readyState > 2) return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+  function capturing() {
+    try {
+      for (var i = 0; i < streams.length; i++) {
+        var tr = streams[i].getTracks();
+        for (var j = 0; j < tr.length; j++) if (tr[j].readyState === 'live') return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+  window.__twigBusy = function () { return dirty || playing() || capturing(); };
+})();"#;
+
 /// Tab ids double as webview labels, which must be unique across the whole
 /// app - not just within one window - so this is a single shared counter
 /// rather than a per-window one.
@@ -388,6 +437,7 @@ fn spawn_webview<R: Runtime>(
             }
             true
         });
+    builder = builder.initialization_script(BUSY_TRACKER);
     if scroll_y > 0.0 {
         builder = builder.initialization_script(format!(
             "window.addEventListener('DOMContentLoaded', function () {{ window.scrollTo(0, {scroll_y}); }});"
@@ -462,22 +512,47 @@ fn capture_scroll<R: Runtime>(webview: &Webview<R>) -> Result<f64, String> {
     raw.parse::<f64>().map_err(|e| e.to_string())
 }
 
+/// Whether tearing this tab down right now would cost the user something
+/// (see BUSY_TRACKER). A page that can't answer within the timeout is
+/// treated as idle: one that won't run a one-line script is exactly the
+/// one worth reclaiming, and its URL survives hibernation regardless.
+fn is_busy<R: Runtime>(webview: &Webview<R>) -> bool {
+    let (tx, rx) = mpsc::channel();
+    let sent = webview.eval_with_callback(
+        "(window.__twigBusy && window.__twigBusy()) || false",
+        move |result| {
+            let _ = tx.send(result);
+        },
+    );
+    if sent.is_err() {
+        return false;
+    }
+    matches!(rx.recv_timeout(Duration::from_millis(250)), Ok(v) if v.trim() == "true")
+}
+
 /// Tears down a hot tab's webview, capturing its scroll position first on a
 /// best-effort basis. No-op if the tab is already hibernated.
-fn hibernate<R: Runtime>(app: &AppHandle<R>, entry: &mut TabEntry) {
+/// Returns whether the tab was actually put to sleep. A tab that's busy
+/// refuses, and callers are expected to move on to the next candidate
+/// rather than insisting.
+fn hibernate<R: Runtime>(app: &AppHandle<R>, entry: &mut TabEntry) -> bool {
     // An empty-url tab holds no webview in the first place, so there's
     // nothing to reclaim and nothing to show as sleeping.
     if entry.status == TabStatus::Hibernated || entry.url.is_empty() {
-        return;
+        return false;
     }
     let label = tab_label(&entry.id);
     if let Some(webview) = app.get_webview(&label) {
+        if is_busy(&webview) {
+            return false;
+        }
         if let Ok(y) = capture_scroll(&webview) {
             entry.scroll_y = y;
         }
         let _ = webview.close();
     }
     entry.status = TabStatus::Hibernated;
+    true
 }
 
 /// Makes sure a tab has a live webview (recreating it if it was hibernated)
@@ -507,6 +582,9 @@ fn wake<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, inner: &mut Inner, i
 /// Hibernates hot tabs beyond `MAX_HOT_TABS`, oldest-viewed first, always
 /// keeping `keep_ids` (the tab(s) currently on screen) alive.
 fn enforce_hot_cap<R: Runtime>(app: &AppHandle<R>, inner: &mut Inner, keep_ids: &[String]) {
+    // Tabs that declined to sleep. Without this the loop would keep
+    // picking the same busy tab and never terminate.
+    let mut skipped: Vec<String> = Vec::new();
     loop {
         let hot_count = inner.tabs.iter().filter(|t| t.status == TabStatus::Hot).count();
         if hot_count <= MAX_HOT_TABS {
@@ -515,14 +593,24 @@ fn enforce_hot_cap<R: Runtime>(app: &AppHandle<R>, inner: &mut Inner, keep_ids: 
         let oldest = inner
             .tabs
             .iter()
-            .filter(|t| t.status == TabStatus::Hot && !keep_ids.iter().any(|k| k == &t.id))
+            .filter(|t| t.status == TabStatus::Hot)
+            .filter(|t| !keep_ids.iter().any(|k| k == &t.id))
+            .filter(|t| !skipped.iter().any(|k| k == &t.id))
             .min_by_key(|t| t.last_active_at)
             .map(|t| t.id.clone());
         let Some(oldest_id) = oldest else {
+            // Everything left is busy or pinned: going over the cap beats
+            // throwing away someone's half-written form.
             return;
         };
-        if let Some(entry) = inner.tabs.iter_mut().find(|t| t.id == oldest_id) {
-            hibernate(app, entry);
+        let slept = inner
+            .tabs
+            .iter_mut()
+            .find(|t| t.id == oldest_id)
+            .map(|entry| hibernate(app, entry))
+            .unwrap_or(false);
+        if !slept {
+            skipped.push(oldest_id);
         }
     }
 }
@@ -1619,12 +1707,16 @@ pub fn watch_idle_tabs<R: Runtime>(app: &AppHandle<R>) {
             if stale.is_empty() {
                 continue;
             }
+            let mut slept_any = false;
             for id in &stale {
                 if let Some(entry) = inner.tabs.iter_mut().find(|t| &t.id == id) {
-                    hibernate(&app_handle, entry);
+                    slept_any |= hibernate(&app_handle, entry);
                 }
             }
-            emit_tabs_changed(&app_handle, label, inner);
+            // Busy tabs stay awake and get another look next sweep.
+            if slept_any {
+                emit_tabs_changed(&app_handle, label, inner);
+            }
         }
     });
 }
