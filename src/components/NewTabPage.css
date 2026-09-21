@@ -25,12 +25,11 @@
 
 .newtab-mark {
   margin: 0 0 22px;
-  font-family: "Fraunces Wordmark", -apple-system, serif;
-  font-style: italic;
-  font-weight: 500;
-  font-size: 46px;
+  font-family: "Twig Wordmark", Georgia, serif;
+  font-weight: 400;
+  font-size: 44px;
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
   color: var(--accent);
   /* The one authored moment on this surface. */
   animation: newtab-mark-in 0.5s var(--ease) both;
