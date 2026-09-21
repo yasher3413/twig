@@ -77,6 +77,32 @@ export async function historyCount(): Promise<number> {
   return rows[0]?.n ?? 0;
 }
 
+/** History ranked for omnibox autocomplete: prefix matches on the host
+ *  first (typing "git" should reach github before a page that merely
+ *  mentions it), then by how often the page has been visited. */
+export async function autocomplete(query: string, limit = 6): Promise<HistoryEntry[]> {
+  if (!query.trim()) return [];
+  const like = `%${query}%`;
+  const prefix = `${query}%`;
+  const rows = await db.select<HistoryRow[]>(
+    `SELECT MIN(id) as id, url, title, MAX(visited_at) as visited_at FROM history
+     WHERE url LIKE $1 OR title LIKE $1
+     GROUP BY url
+     ORDER BY
+       CASE
+         WHEN url LIKE 'https://' || $2 THEN 0
+         WHEN url LIKE 'https://www.' || $2 THEN 0
+         WHEN title LIKE $2 THEN 1
+         ELSE 2
+       END,
+       COUNT(*) DESC,
+       MAX(visited_at) DESC
+     LIMIT $3`,
+    [like, prefix, limit],
+  );
+  return rows.map((r) => ({ id: r.id, url: r.url, title: r.title, visitedAt: r.visited_at }));
+}
+
 /** Wipes local browsing history. Bookmarks are kept - they're explicit. */
 export async function clearHistory(): Promise<void> {
   await db.execute("DELETE FROM history");

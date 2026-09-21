@@ -23,11 +23,10 @@
   gap: 6px;
   padding: 0 4px 0 2px;
   flex-shrink: 0;
-  font-family: "Fraunces Wordmark", -apple-system, serif;
-  font-style: italic;
-  font-weight: 500;
-  font-size: 18px;
-  letter-spacing: -0.01em;
+  font-family: "Twig Wordmark", Georgia, serif;
+  font-weight: 400;
+  font-size: 16.5px;
+  letter-spacing: -0.005em;
   color: var(--accent);
 }
 
@@ -72,6 +71,7 @@
 
 /* The omnibox is the one element allowed to dominate this bar. */
 .omnibox {
+  position: relative;
   flex: 1;
   min-width: 0;
   height: 30px;
@@ -152,4 +152,67 @@
 
 .omnibox-star.on {
   color: var(--accent);
+}
+
+.omnibox-suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  animation: omnibox-suggestions-in 0.14s var(--ease);
+}
+
+@keyframes omnibox-suggestions-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.suggestion {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: default;
+}
+
+.suggestion.active {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.suggestion-label {
+  flex-shrink: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.suggestion.active .suggestion-label {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.suggestion-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  opacity: 0.8;
 }

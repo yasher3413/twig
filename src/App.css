@@ -1,9 +1,11 @@
-/* Fraunces (SIL Open Font License) - used only for the "twig" wordmark. */
+/* Young Serif (SIL Open Font License) - used only for the "twig"
+   wordmark. Self-hosted rather than linked so the mark renders the same
+   with no network, and subset to latin. */
 @font-face {
-  font-family: "Fraunces Wordmark";
-  src: url("./assets/fonts/Fraunces-Italic-500.woff2") format("woff2");
-  font-weight: 500;
-  font-style: italic;
+  font-family: "Twig Wordmark";
+  src: url("./assets/fonts/YoungSerif-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
   font-display: swap;
 }
 
@@ -142,6 +144,15 @@ textarea {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+/* Inputs that sit inside a wrapper which already lights up on focus. A
+   ring here would draw a second box inside the first. */
+.omnibox-input:focus-visible,
+.newtab-search input:focus-visible,
+.find-input:focus-visible,
+.space-rename:focus-visible {
+  outline: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
