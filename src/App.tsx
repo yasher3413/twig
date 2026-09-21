@@ -6,6 +6,7 @@ import { FindBar } from "./components/FindBar";
 import { CommandPalette } from "./components/CommandPalette";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { NewTabPage } from "./components/NewTabPage";
+import { Library } from "./components/Library";
 import { useTabStore } from "./store/tabs";
 import { useSettingsStore } from "./store/settings";
 import { followLink, goBack, goForward, isNewTab, reloadTab, zoomTab } from "./lib/tabs";
@@ -105,6 +106,7 @@ function App() {
       <AddressBar />
       {showNewTab && <NewTabPage />}
       <FindBar />
+      <Library />
       <CommandPalette />
       <SettingsPanel />
     </>

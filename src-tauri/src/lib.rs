@@ -134,6 +134,9 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .item(&action(app, "go-forward", "Forward", "CmdOrCtrl+BracketRight")?)
         .separator()
         .item(&action(app, "bookmark", "Bookmark This Page", "CmdOrCtrl+D")?)
+        .item(&action(app, "show-bookmarks", "Show Bookmarks", "CmdOrCtrl+Shift+O")?)
+        .separator()
+        .item(&action(app, "show-history", "Show History", "CmdOrCtrl+Y")?)
         .build()?;
 
     let mut tab_menu = SubmenuBuilder::new(app, "Tab")

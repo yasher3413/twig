@@ -151,6 +151,12 @@ export async function clearPageIndex(): Promise<void> {
   await db.execute("DELETE FROM page_text");
 }
 
+/** Forgets every visit to a URL, and its indexed text with it. */
+export async function deleteHistoryUrl(url: string): Promise<void> {
+  await db.execute("DELETE FROM history WHERE url = $1", [url]);
+  await db.execute("DELETE FROM page_text WHERE url = $1", [url]);
+}
+
 /** Wipes local browsing history. Bookmarks are kept - they're explicit. */
 export async function clearHistory(): Promise<void> {
   await db.execute("DELETE FROM history");

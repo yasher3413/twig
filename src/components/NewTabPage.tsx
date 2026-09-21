@@ -2,15 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useTabStore } from "../store/tabs";
 import { historyCount, topSites, searchBookmarks, type Bookmark, type HistoryEntry } from "../lib/db";
 import { Icon } from "./Icon";
+import { SiteMark, hostOf } from "./SiteMark";
 import "./NewTabPage.css";
-
-function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
 
 // Drawn by the chrome webview rather than loaded into the tab's own
 // webview. That's what lets it read local history/bookmarks at all - a
@@ -128,27 +121,5 @@ export function NewTabPage() {
         )}
       </footer>
     </div>
-  );
-}
-
-// Favicons come from Google's public icon service, which is also where
-// search goes now. Falls back to the host's first letter when it 404s or
-// the machine is offline.
-function SiteMark({ url }: { url: string }) {
-  const [failed, setFailed] = useState(false);
-  const host = hostOf(url);
-
-  if (failed) {
-    return <span className="site-mark site-mark-letter">{host.charAt(0).toUpperCase()}</span>;
-  }
-
-  return (
-    <img
-      className="site-mark"
-      src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`}
-      alt=""
-      loading="lazy"
-      onError={() => setFailed(true)}
-    />
   );
 }
