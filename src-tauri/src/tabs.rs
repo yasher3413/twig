@@ -1770,6 +1770,7 @@ pub fn open_private_window<R: Runtime>(app: AppHandle<R>, manager: State<'_, Tab
 
     manager.0.lock().unwrap().insert(label, Inner::new_private());
     watch_window(&app, &window);
+    ensure_first_tab(&app, &window);
 
     Ok(())
 }
@@ -2146,6 +2147,23 @@ pub fn restore_session<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) {
     sync_visible_webviews(app, window, inner);
     focus_active(app, inner);
     emit_tabs_changed(app, window.label(), inner);
+}
+
+/// Opens the new tab page if a window has nothing in it, so launching
+/// lands somewhere usable instead of on empty chrome. Costs nothing: an
+/// empty tab holds no webview until you navigate.
+pub fn ensure_first_tab<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) {
+    let manager = app.state::<TabManager>();
+    let mut managers = manager.0.lock().unwrap();
+    let inner = inner_for(&mut managers, window);
+    if !inner.tabs.is_empty() {
+        return;
+    }
+    if open_tab(app, window, inner, String::new(), DEFAULT_TAB_TITLE.to_string()).is_ok() {
+        sync_visible_webviews(app, window, inner);
+        focus_active(app, inner);
+        emit_tabs_changed(app, window.label(), inner);
+    }
 }
 
 /// Keeps a window's visible webview(s) sized to fill it whenever it

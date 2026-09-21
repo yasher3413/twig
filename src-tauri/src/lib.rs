@@ -234,6 +234,7 @@ pub fn run() {
             tabs::watch_window(app.handle(), &main_window);
             tabs::load_zoom_levels(app.handle());
             tabs::restore_session(app.handle(), &main_window);
+            tabs::ensure_first_tab(app.handle(), &main_window);
             tabs::watch_idle_tabs(app.handle());
             Ok(())
         })
