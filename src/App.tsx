@@ -8,7 +8,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { NewTabPage } from "./components/NewTabPage";
 import { useTabStore } from "./store/tabs";
 import { useSettingsStore } from "./store/settings";
-import { isNewTab } from "./lib/tabs";
+import { goBack, goForward, isNewTab, reloadTab, zoomTab } from "./lib/tabs";
 import "./App.css";
 
 function App() {
@@ -36,8 +36,37 @@ function App() {
         case "toggle-tab-strip":
           store.toggleTabStrip();
           break;
-        // "command-palette", "find-in-page", and "settings" are handled by
-        // those components directly.
+        case "reload":
+          if (store.activeId) reloadTab(store.activeId);
+          break;
+        case "go-back":
+          if (store.activeId) goBack(store.activeId);
+          break;
+        case "go-forward":
+          if (store.activeId) goForward(store.activeId);
+          break;
+        case "zoom-in":
+        case "zoom-out":
+        case "zoom-reset":
+          if (store.activeId) {
+            const dir = event.payload === "zoom-in" ? 1 : event.payload === "zoom-out" ? -1 : 0;
+            zoomTab(store.activeId, dir);
+          }
+          break;
+        case "next-tab":
+        case "prev-tab": {
+          const spaceTabs = store.tabs.filter((t) => t.groupId === store.activeGroupId);
+          if (spaceTabs.length > 1 && store.activeId) {
+            const at = spaceTabs.findIndex((t) => t.id === store.activeId);
+            const step = event.payload === "next-tab" ? 1 : -1;
+            // Wraps, the way every browser's tab cycling does.
+            const next = (at + step + spaceTabs.length) % spaceTabs.length;
+            store.switchTo(spaceTabs[next].id);
+          }
+          break;
+        }
+        // "command-palette", "find-in-page", "focus-address", "bookmark",
+        // and "settings" are handled by the components that own them.
       }
     });
 

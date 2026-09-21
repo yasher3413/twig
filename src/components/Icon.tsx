@@ -18,7 +18,10 @@ export type IconName =
   | "up"
   | "down"
   | "search"
-  | "incognito";
+  | "incognito"
+  | "star"
+  | "star-filled"
+  | "history";
 
 const PATHS: Record<IconName, ReactNode> = {
   back: <path d="M10 3.5 5.5 8l4.5 4.5" />,
@@ -64,6 +67,20 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <circle cx="7.25" cy="7.25" r="4" />
       <path d="M10.25 10.25 13.25 13.25" />
+    </>
+  ),
+  star: <path d="M8 2.5l1.72 3.62 3.78.57-2.75 2.8.65 3.9L8 11.54l-3.4 1.85.65-3.9-2.75-2.8 3.78-.57L8 2.5Z" />,
+  "star-filled": (
+    <path
+      d="M8 2.5l1.72 3.62 3.78.57-2.75 2.8.65 3.9L8 11.54l-3.4 1.85.65-3.9-2.75-2.8 3.78-.57L8 2.5Z"
+      fill="currentColor"
+    />
+  ),
+  history: (
+    <>
+      <path d="M2.9 8a5.1 5.1 0 1 0 1.6-3.7L2.75 6" />
+      <path d="M2.75 3.5V6h2.5" />
+      <path d="M8 5.25V8l1.9 1.9" />
     </>
   ),
   // A sprig rather than the usual spy-glasses: private windows are still

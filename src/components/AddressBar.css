@@ -126,3 +126,30 @@
 .omnibox-input:disabled {
   cursor: default;
 }
+
+.omnibox-star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: default;
+  transition:
+    color 0.12s var(--ease),
+    background-color 0.12s var(--ease);
+}
+
+.omnibox-star:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+.omnibox-star.on {
+  color: var(--accent);
+}

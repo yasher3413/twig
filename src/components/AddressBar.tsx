@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { useTabStore } from "../store/tabs";
 import { useSettingsStore } from "../store/settings";
 import { goBack, goForward, isInternalUrl, reloadTab } from "../lib/tabs";
+import { addBookmark, isBookmarked, removeBookmark } from "../lib/db";
 import { SpaceSwitcher } from "./SpaceSwitcher";
 import { Icon } from "./Icon";
 import "./AddressBar.css";
@@ -20,9 +22,42 @@ export function AddressBar() {
   const url = activeTab?.url ?? "";
   const internal = isInternalUrl(url);
 
+  const [bookmarked, setBookmarked] = useState(false);
+
   useEffect(() => {
     if (!editing) setDraft(internal ? "" : url);
   }, [url, internal, editing]);
+
+  useEffect(() => {
+    if (internal || isPrivate) {
+      setBookmarked(false);
+      return;
+    }
+    isBookmarked(url).then(setBookmarked);
+  }, [url, internal, isPrivate]);
+
+  async function toggleBookmark() {
+    if (internal || isPrivate || !activeTab) return;
+    if (bookmarked) {
+      await removeBookmark(url);
+    } else {
+      await addBookmark(url, activeTab.title);
+    }
+    setBookmarked(!bookmarked);
+  }
+
+  useEffect(() => {
+    const unlisten = listen<string>("menu-action", (event) => {
+      if (event.payload === "focus-address") {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }
+      if (event.payload === "bookmark") toggleBookmark();
+    });
+    return () => {
+      unlisten.then((f) => f());
+    };
+  });
 
   function commit() {
     const target = draft.trim();
@@ -102,6 +137,15 @@ export function AddressBar() {
             }
           }}
         />
+        {!internal && !isPrivate && (
+          <button
+            className={bookmarked ? "omnibox-star on" : "omnibox-star"}
+            title={bookmarked ? "Remove bookmark (⌘D)" : "Bookmark this page (⌘D)"}
+            onClick={toggleBookmark}
+          >
+            <Icon name={bookmarked ? "star-filled" : "star"} size={14} />
+          </button>
+        )}
       </div>
 
       <SpaceSwitcher />

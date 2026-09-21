@@ -111,6 +111,20 @@ export function goForward(id: string): Promise<void> {
   return invoke("go_forward", { id });
 }
 
+/** Steps zoom on a tab: 1 in, -1 out, 0 reset. Returns the new level. */
+export function zoomTab(id: string, direction: number): Promise<number> {
+  return invoke("zoom_tab", { id, direction });
+}
+
+/** Clears cookies and site data — the storage that keeps you signed in. */
+export function clearSiteData(): Promise<void> {
+  return invoke("clear_site_data");
+}
+
+export function setSearchEngine(template: string): Promise<void> {
+  return invoke("set_search_engine", { template });
+}
+
 export function reloadTab(id: string): Promise<void> {
   return invoke("reload_tab", { id });
 }

@@ -221,8 +221,10 @@ impl Inner {
 /// Owns tab state for every window, keyed by window label. Each window (the
 /// main one, and any private ones opened later) gets its own independent
 /// set of tabs/spaces - see `Inner`.
+/// Tab state per window, plus each tab's zoom level (kept separately since
+/// it's about presentation, not tab identity).
 #[derive(Default)]
-pub struct TabManager(Mutex<HashMap<String, Inner>>);
+pub struct TabManager(Mutex<HashMap<String, Inner>>, Mutex<HashMap<String, f64>>);
 
 impl TabManager {
     pub fn new() -> Self {
@@ -882,6 +884,18 @@ mod reorder_tests {
     }
 }
 
+/// Search URL template, with `{}` where the encoded query goes. Set from
+/// Settings; Google until the frontend says otherwise.
+static SEARCH_TEMPLATE: Mutex<Option<String>> = Mutex::new(None);
+
+const DEFAULT_SEARCH_TEMPLATE: &str = "https://www.google.com/search?q={}";
+
+/// Points the omnibox and command palette at a different search engine.
+#[tauri::command]
+pub fn set_search_engine(template: String) {
+    *SEARCH_TEMPLATE.lock().unwrap() = Some(template);
+}
+
 /// Turns whatever was typed into the address bar or command palette into a
 /// real URL: a bare host like "example.com" gets `https://` added, and
 /// anything that doesn't look like a URL at all (e.g. "rust borrow checker")
@@ -896,7 +910,12 @@ fn normalize_url(input: &str) -> String {
         format!("https://{trimmed}")
     } else {
         let query: String = url::form_urlencoded::byte_serialize(trimmed.as_bytes()).collect();
-        format!("https://www.google.com/search?q={query}")
+        let template = SEARCH_TEMPLATE
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_else(|| DEFAULT_SEARCH_TEMPLATE.to_string());
+        template.replace("{}", &query)
     }
 }
 
@@ -1285,6 +1304,52 @@ pub fn open_private_window<R: Runtime>(app: AppHandle<R>, manager: State<'_, Tab
     manager.0.lock().unwrap().insert(label, Inner::new_private());
     watch_window(&app, &window);
 
+    Ok(())
+}
+
+/// Steps a tab's zoom. `direction` is 1 to zoom in, -1 out, 0 to reset.
+/// Zoom lives on the webview rather than in `TabEntry`, so it resets when
+/// a tab hibernates - matching what the page itself does on reload.
+#[tauri::command]
+pub fn zoom_tab<R: Runtime>(
+    app: AppHandle<R>,
+    manager: State<'_, TabManager>,
+    id: String,
+    direction: i32,
+) -> Result<f64, String> {
+    let mut levels = manager.1.lock().unwrap();
+    let current = *levels.get(&id).unwrap_or(&1.0);
+    let next = match direction {
+        0 => 1.0,
+        d if d > 0 => (current + 0.1).min(3.0),
+        _ => (current - 0.1).max(0.3),
+    };
+    let rounded = (next * 100.0).round() / 100.0;
+
+    if let Some(webview) = app.get_webview(&tab_label(&id)) {
+        webview.set_zoom(rounded).map_err(|e| e.to_string())?;
+    }
+    levels.insert(id, rounded);
+    Ok(rounded)
+}
+
+/// Wipes cookies, local storage, and other site data for this window's
+/// webviews - the storage that keeps you logged in to sites.
+#[tauri::command]
+pub fn clear_site_data<R: Runtime>(
+    app: AppHandle<R>,
+    window: Window<R>,
+    manager: State<'_, TabManager>,
+) -> Result<(), String> {
+    let managers = manager.0.lock().unwrap();
+    let Some(inner) = managers.get(window.label()) else {
+        return Ok(());
+    };
+    for tab in &inner.tabs {
+        if let Some(webview) = app.get_webview(&tab_label(&tab.id)) {
+            webview.clear_all_browsing_data().map_err(|e| e.to_string())?;
+        }
+    }
     Ok(())
 }
 

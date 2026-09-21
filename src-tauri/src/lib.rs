@@ -45,45 +45,107 @@ fn migrations() -> Vec<Migration> {
 /// listener there would silently never fire once you've looked at a page.
 /// macOS dispatches menu key equivalents at the OS level before delivering
 /// to whichever view has focus, so this works regardless.
+/// The menu is assembled by hand rather than extending `Menu::default()`.
+/// That default ships a Window submenu whose predefined "Close Window"
+/// already claims CmdOrCtrl+W, and macOS dispatches a duplicate key
+/// equivalent to whichever matching item comes first - so Cmd+W closed the
+/// window and our Close Tab item below it never fired. Closing a window is
+/// Cmd+Shift+W here, the way browsers do it.
 fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
-    let menu = Menu::default(app)?;
+    fn action<R: Runtime>(
+        app: &AppHandle<R>,
+        id: &str,
+        label: &str,
+        accel: &str,
+    ) -> tauri::Result<tauri::menu::MenuItem<R>> {
+        MenuItemBuilder::with_id(id, label).accelerator(accel).build(app)
+    }
+
+    let app_menu = SubmenuBuilder::new(app, "twig")
+        .about(None)
+        .separator()
+        .item(&action(app, "settings", "Settings…", "CmdOrCtrl+,")?)
+        .separator()
+        .services()
+        .separator()
+        .hide()
+        .hide_others()
+        .show_all()
+        .separator()
+        .quit()
+        .build()?;
+
+    let file_menu = SubmenuBuilder::new(app, "File")
+        .item(&action(app, "new-tab", "New Tab", "CmdOrCtrl+T")?)
+        .item(&action(app, "new-private-window", "New Private Window", "CmdOrCtrl+Shift+N")?)
+        .separator()
+        .item(&action(app, "close-tab", "Close Tab", "CmdOrCtrl+W")?)
+        .item(&action(app, "reopen-closed-tab", "Reopen Closed Tab", "CmdOrCtrl+Shift+T")?)
+        .separator()
+        .item(&action(app, "close-window", "Close Window", "CmdOrCtrl+Shift+W")?)
+        .build()?;
+
+    // Without these predefined items, copy/paste stops working entirely in
+    // the omnibox - they're what wire up the standard responder actions.
+    let edit_menu = SubmenuBuilder::new(app, "Edit")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .separator()
+        .item(&action(app, "focus-address", "Open Location…", "CmdOrCtrl+L")?)
+        .item(&action(app, "find-in-page", "Find in Page", "CmdOrCtrl+F")?)
+        .item(&action(app, "command-palette", "Command Palette…", "CmdOrCtrl+K")?)
+        .build()?;
+
+    let view_menu = SubmenuBuilder::new(app, "View")
+        .item(&action(app, "reload", "Reload Page", "CmdOrCtrl+R")?)
+        .separator()
+        .item(&action(app, "zoom-in", "Zoom In", "CmdOrCtrl+Equal")?)
+        .item(&action(app, "zoom-out", "Zoom Out", "CmdOrCtrl+Minus")?)
+        .item(&action(app, "zoom-reset", "Actual Size", "CmdOrCtrl+Digit0")?)
+        .separator()
+        .item(&action(app, "toggle-tab-strip", "Hide Tab Strip", "CmdOrCtrl+B")?)
+        .build()?;
+
+    let history_menu = SubmenuBuilder::new(app, "History")
+        .item(&action(app, "go-back", "Back", "CmdOrCtrl+BracketLeft")?)
+        .item(&action(app, "go-forward", "Forward", "CmdOrCtrl+BracketRight")?)
+        .separator()
+        .item(&action(app, "bookmark", "Bookmark This Page", "CmdOrCtrl+D")?)
+        .build()?;
 
     let mut tab_menu = SubmenuBuilder::new(app, "Tab")
-        .item(&MenuItemBuilder::with_id("new-tab", "New Tab").accelerator("CmdOrCtrl+T").build(app)?)
-        .item(&MenuItemBuilder::with_id("close-tab", "Close Tab").accelerator("CmdOrCtrl+W").build(app)?)
-        .item(
-            &MenuItemBuilder::with_id("reopen-closed-tab", "Reopen Closed Tab")
-                .accelerator("CmdOrCtrl+Shift+T")
-                .build(app)?,
-        )
-        .separator()
-        .item(
-            &MenuItemBuilder::with_id("new-private-window", "New Private Window")
-                .accelerator("CmdOrCtrl+Shift+N")
-                .build(app)?,
-        )
-        .separator()
-        .item(
-            &MenuItemBuilder::with_id("command-palette", "Command Palette…")
-                .accelerator("CmdOrCtrl+K")
-                .build(app)?,
-        )
-        .item(&MenuItemBuilder::with_id("find-in-page", "Find in Page").accelerator("CmdOrCtrl+F").build(app)?)
-        .item(&MenuItemBuilder::with_id("toggle-tab-strip", "Toggle Tab Strip").accelerator("CmdOrCtrl+B").build(app)?)
-        .separator()
-        .item(&MenuItemBuilder::with_id("settings", "Settings…").accelerator("CmdOrCtrl+,").build(app)?)
+        .item(&action(app, "next-tab", "Next Tab", "CmdOrCtrl+Shift+BracketRight")?)
+        .item(&action(app, "prev-tab", "Previous Tab", "CmdOrCtrl+Shift+BracketLeft")?)
         .separator();
 
     for n in 1..=9u32 {
-        tab_menu = tab_menu.item(
-            &MenuItemBuilder::with_id(format!("goto-tab-{n}"), format!("Go to Tab {n}"))
-                .accelerator(format!("CmdOrCtrl+{n}"))
-                .build(app)?,
-        );
+        tab_menu = tab_menu.item(&action(
+            app,
+            &format!("goto-tab-{n}"),
+            &format!("Go to Tab {n}"),
+            &format!("CmdOrCtrl+{n}"),
+        )?);
     }
 
-    menu.append(&tab_menu.build()?)?;
-    Ok(menu)
+    let window_menu = SubmenuBuilder::new(app, "Window").minimize().maximize().build()?;
+
+    Menu::with_items(
+        app,
+        &[
+            &app_menu,
+            &file_menu,
+            &edit_menu,
+            &view_menu,
+            &history_menu,
+            &tab_menu.build()?,
+            &window_menu,
+        ],
+    )
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -113,6 +175,14 @@ pub fn run() {
             let Some(window) = app.get_focused_window() else {
                 return;
             };
+
+            // Closing a window is a window operation, not a tab one - the
+            // frontend has nothing to do with it.
+            if id == "close-window" {
+                let _ = window.close();
+                return;
+            }
+
             let target = EventTarget::webview(window.label());
             if let Some(n) = id.strip_prefix("goto-tab-") {
                 let _ = app.emit_to(target, "menu-goto-tab", n.to_string());
@@ -148,6 +218,9 @@ pub fn run() {
             tabs::go_back,
             tabs::go_forward,
             tabs::reload_tab,
+            tabs::zoom_tab,
+            tabs::clear_site_data,
+            tabs::set_search_engine,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
