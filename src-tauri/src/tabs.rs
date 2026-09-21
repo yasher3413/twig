@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    webview::{Color, PageLoadEvent}, AppHandle, Emitter, EventTarget, LogicalPosition, LogicalSize, Manager,
+    webview::{Color, DownloadEvent, PageLoadEvent}, AppHandle, Emitter, EventTarget, LogicalPosition, LogicalSize, Manager,
     Runtime, State, Theme, Webview, WebviewBuilder, WebviewUrl, WebviewWindowBuilder, Window,
     WindowEvent,
 };
@@ -226,6 +226,76 @@ const LINK_HINTS: &str = r#"(function () {
   };
 })();"#;
 
+/// Reader mode. Scores blocks by how much prose they hold versus how much
+/// markup, keeps the densest one, and re-renders it on a plain sheet.
+/// Deliberately not a port of Readability - it's a tenth of the size and
+/// gets the common case (an article inside a page full of chrome) right.
+/// Toggling restores the original document.
+const READER: &str = r#"(function () {
+  if (window.__twigReaderReady) return;
+  window.__twigReaderReady = true;
+  var saved = null;
+
+  function score(el) {
+    var text = el.innerText || '';
+    if (text.length < 400) return 0;
+    var links = el.querySelectorAll('a');
+    var linkLen = 0;
+    for (var i = 0; i < links.length; i++) linkLen += (links[i].innerText || '').length;
+    // Mostly-links blocks are navigation, however long they are.
+    var density = linkLen / text.length;
+    if (density > 0.5) return 0;
+    var paras = el.querySelectorAll('p').length;
+    return text.length * (1 - density) * (1 + Math.min(paras, 20) / 20);
+  }
+
+  function pick() {
+    var best = null, bestScore = 0;
+    var cands = document.querySelectorAll('article, main, [role=main], section, div');
+    for (var i = 0; i < cands.length; i++) {
+      var s = score(cands[i]);
+      if (s > bestScore) { bestScore = s; best = cands[i]; }
+    }
+    return best;
+  }
+
+  window.__twigReader = function () {
+    if (saved !== null) {
+      document.body.innerHTML = saved;
+      document.body.removeAttribute('data-twig-reader');
+      saved = null;
+      return false;
+    }
+    var target = pick();
+    if (!target) return false;
+    saved = document.body.innerHTML;
+    var title = document.title || '';
+    var sheet = document.createElement('div');
+    sheet.setAttribute('data-twig-sheet', '');
+    sheet.innerHTML = '<h1></h1>' + target.innerHTML;
+    sheet.firstChild.textContent = title;
+    document.body.innerHTML = '';
+    document.body.setAttribute('data-twig-reader', '');
+    document.body.appendChild(sheet);
+    var css = document.createElement('style');
+    css.textContent =
+      'body[data-twig-reader]{background:#f6f4ee!important;margin:0!important;}' +
+      '@media (prefers-color-scheme:dark){body[data-twig-reader]{background:#17190f!important;}' +
+      'body[data-twig-reader] [data-twig-sheet]{color:#e9e7dd!important;}' +
+      'body[data-twig-reader] a{color:#8fbb6e!important;}}' +
+      '[data-twig-sheet]{max-width:68ch;margin:0 auto;padding:56px 24px 96px;' +
+      'font:18px/1.65 -apple-system,Georgia,serif;color:#23261f;}' +
+      '[data-twig-sheet] h1{font-size:2em;line-height:1.2;margin:0 0 .6em;}' +
+      '[data-twig-sheet] img,[data-twig-sheet] video{max-width:100%;height:auto;border-radius:8px;}' +
+      '[data-twig-sheet] pre{overflow-x:auto;padding:12px;border-radius:8px;background:rgba(127,127,127,.12);}' +
+      '[data-twig-sheet] a{color:#4b6b3a;}' +
+      '[data-twig-sheet] p{margin:0 0 1.15em;}';
+    document.body.appendChild(css);
+    window.scrollTo(0, 0);
+    return true;
+  };
+})();"#;
+
 /// Tab ids double as webview labels, which must be unique across the whole
 /// app - not just within one window - so this is a single shared counter
 /// rather than a per-window one.
@@ -268,6 +338,33 @@ pub struct TabsChangedPayload {
     pub active_group_id: String,
     pub tab_strip_visible: bool,
     pub is_private: bool,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DownloadDone {
+    url: String,
+    success: bool,
+}
+
+/// A path in `dir` named `name`, with " (2)", " (3)" and so on appended
+/// until it doesn't collide. Downloading the same file twice shouldn't
+/// quietly destroy the first copy.
+fn unique_path(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
+    let candidate = dir.join(name);
+    if !candidate.exists() {
+        return candidate;
+    }
+    let path = std::path::Path::new(name);
+    let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let ext = path.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+    for n in 2..1000 {
+        let next = dir.join(format!("{stem} ({n}){ext}"));
+        if !next.exists() {
+            return next;
+        }
+    }
+    candidate
 }
 
 /// Shape the capture script returns: title and body text.
@@ -577,11 +674,47 @@ fn spawn_webview<R: Runtime>(
         });
     builder = builder.initialization_script(BUSY_TRACKER);
     builder = builder.initialization_script(LINK_HINTS);
+    builder = builder.initialization_script(READER);
 
     // Once a page settles, lift its text out and hand it to the chrome to
     // index. Private windows are skipped: the point of them is that
     // nothing is written down.
     {
+        // Downloads land in ~/Downloads under the name the server gave,
+        // with a counter appended rather than overwriting anything that's
+        // already there.
+        let downloader = app.clone();
+        builder = builder.on_download(move |_webview, event| match event {
+            DownloadEvent::Requested { url, destination } => {
+                let name = url
+                    .path_segments()
+                    .and_then(|s| s.last())
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "download".to_string());
+                if let Ok(dir) = downloader.path().download_dir() {
+                    *destination = unique_path(&dir, &name);
+                }
+                let _ = downloader.emit_to(
+                    EventTarget::webview(MAIN_WINDOW_LABEL),
+                    "download-started",
+                    destination.file_name().map(|n| n.to_string_lossy().to_string()),
+                );
+                true
+            }
+            DownloadEvent::Finished { url, success, .. } => {
+                let _ = downloader.emit_to(
+                    EventTarget::webview(MAIN_WINDOW_LABEL),
+                    "download-finished",
+                    DownloadDone { url: url.to_string(), success },
+                );
+                true
+            }
+            // The return value only gates Requested; everything else just
+            // needs to satisfy the signature.
+            _ => true,
+        });
+
         let hooked = app.clone();
         let index_pages = !incognito;
         builder = builder.on_page_load(move |webview, payload| {
@@ -1784,6 +1917,17 @@ pub struct MemoryStats {
     /// What those sleeping tabs would cost at the current average, if they
     /// were all awake. An estimate, and labelled as one in the UI.
     estimated_saved_kb: u64,
+}
+
+/// Flips a tab in or out of reader mode.
+#[tauri::command]
+pub fn toggle_reader<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), String> {
+    if let Some(webview) = app.get_webview(&tab_label(&id)) {
+        webview
+            .eval("window.__twigReader && window.__twigReader()")
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 /// Starts link-hint mode in a tab: labels everything clickable in view so

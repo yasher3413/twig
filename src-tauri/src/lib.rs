@@ -126,6 +126,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .item(&action(app, "zoom-out", "Zoom Out", "CmdOrCtrl+Minus")?)
         .item(&action(app, "zoom-reset", "Actual Size", "CmdOrCtrl+Digit0")?)
         .separator()
+        .item(&action(app, "toggle-reader", "Reader View", "CmdOrCtrl+Shift+R")?)
         .item(&action(app, "toggle-tab-strip", "Hide Tab Strip", "CmdOrCtrl+B")?)
         .build()?;
 
@@ -250,6 +251,7 @@ pub fn run() {
             tabs::set_content_offset,
             tabs::memory_stats,
             tabs::follow_link,
+            tabs::toggle_reader,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

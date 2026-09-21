@@ -118,6 +118,11 @@ export function goForward(id: string): Promise<void> {
   return invoke("go_forward", { id });
 }
 
+/** Flips a tab in or out of reader view. */
+export function toggleReader(id: string): Promise<void> {
+  return invoke("toggle_reader", { id });
+}
+
 /** Starts link-hint mode: labels every clickable thing in view so it can
  *  be reached from the keyboard. */
 export function followLink(id: string): Promise<void> {

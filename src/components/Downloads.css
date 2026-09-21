@@ -1,0 +1,81 @@
+/* Top-right, clear of the chrome - `top` is set inline for whichever
+   rows are showing. Sits left of where find-in-page appears so the two
+   can't land on top of each other. */
+.downloads {
+  position: fixed;
+  right: 14px;
+  z-index: 28;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.download {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: 340px;
+  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  pointer-events: auto;
+  animation: download-in 0.2s var(--ease);
+}
+
+@keyframes download-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.download-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.download.done .download-icon {
+  color: var(--accent);
+}
+
+.download-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.download-state {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.download-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: default;
+  transition:
+    background-color 0.12s var(--ease),
+    color 0.12s var(--ease);
+}
+
+.download-dismiss:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}

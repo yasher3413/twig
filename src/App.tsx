@@ -7,9 +7,10 @@ import { CommandPalette } from "./components/CommandPalette";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { NewTabPage } from "./components/NewTabPage";
 import { Library } from "./components/Library";
+import { Downloads } from "./components/Downloads";
 import { useTabStore } from "./store/tabs";
 import { useSettingsStore } from "./store/settings";
-import { followLink, goBack, goForward, isNewTab, reloadTab, zoomTab } from "./lib/tabs";
+import { followLink, goBack, goForward, isNewTab, reloadTab, toggleReader, zoomTab } from "./lib/tabs";
 import { indexPage } from "./lib/db";
 import "./App.css";
 
@@ -43,6 +44,9 @@ function App() {
           break;
         case "follow-link":
           if (store.activeId) followLink(store.activeId);
+          break;
+        case "toggle-reader":
+          if (store.activeId) toggleReader(store.activeId);
           break;
         case "go-back":
           if (store.activeId) goBack(store.activeId);
@@ -107,6 +111,7 @@ function App() {
       {showNewTab && <NewTabPage />}
       <FindBar />
       <Library />
+      <Downloads />
       <CommandPalette />
       <SettingsPanel />
     </>
