@@ -118,6 +118,12 @@ export function goForward(id: string): Promise<void> {
   return invoke("go_forward", { id });
 }
 
+/** Starts link-hint mode: labels every clickable thing in view so it can
+ *  be reached from the keyboard. */
+export function followLink(id: string): Promise<void> {
+  return invoke("follow_link", { id });
+}
+
 export interface MemoryStats {
   footprintKb: number;
   processCount: number;

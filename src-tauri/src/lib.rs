@@ -99,6 +99,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .separator()
         .item(&action(app, "focus-address", "Open Location…", "CmdOrCtrl+L")?)
         .item(&action(app, "find-in-page", "Find in Page", "CmdOrCtrl+F")?)
+        .item(&action(app, "follow-link", "Follow Link…", "CmdOrCtrl+E")?)
         .item(&action(app, "command-palette", "Command Palette…", "CmdOrCtrl+K")?)
         .build()?;
 
@@ -228,6 +229,7 @@ pub fn run() {
             tabs::set_search_engine,
             tabs::set_content_offset,
             tabs::memory_stats,
+            tabs::follow_link,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

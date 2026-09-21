@@ -105,6 +105,127 @@ const BUSY_TRACKER: &str = r#"(function () {
   window.__twigBusy = function () { return dirty || playing() || capturing(); };
 })();"#;
 
+/// Keyboard link following, the one thing a keyboard-first browser really
+/// owes you. Labels every clickable thing in view; type the label to
+/// follow it. Deliberately driven by a menu accelerator rather than a bare
+/// 'f' keypress, because plenty of sites already bind single letters -
+/// 'f' is fullscreen on YouTube - and silently breaking them would be a
+/// worse trade than one extra modifier.
+const LINK_HINTS: &str = r#"(function () {
+  if (window.__twigHintsReady) return;
+  window.__twigHintsReady = true;
+  var CHARS = 'asdfghjkl';
+  var layer = null, targets = [], buf = '';
+
+  function candidates() {
+    var sel = 'a[href], button, input:not([type=hidden]), select, textarea,' +
+      '[role=button], [role=link], [onclick], [tabindex]:not([tabindex="-1"])';
+    var out = [];
+    var els = document.querySelectorAll(sel);
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i], r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) continue;
+      if (r.bottom < 0 || r.top > window.innerHeight) continue;
+      if (r.right < 0 || r.left > window.innerWidth) continue;
+      if (el.disabled) continue;
+      var st = window.getComputedStyle(el);
+      if (st.visibility === 'hidden' || st.display === 'none' || st.opacity === '0') continue;
+      out.push({ el: el, rect: r });
+    }
+    return out;
+  }
+
+  function labelsFor(n) {
+    var len = 1, cap = CHARS.length;
+    while (cap < n) { len++; cap *= CHARS.length; }
+    var out = [];
+    for (var i = 0; i < n; i++) {
+      var s = '', x = i;
+      for (var k = 0; k < len; k++) { s = CHARS.charAt(x % CHARS.length) + s; x = Math.floor(x / CHARS.length); }
+      out.push(s);
+    }
+    return out;
+  }
+
+  function teardown() {
+    if (layer && layer.parentNode) layer.parentNode.removeChild(layer);
+    layer = null; targets = []; buf = '';
+    window.removeEventListener('keydown', onKey, true);
+    window.removeEventListener('scroll', teardown, true);
+  }
+
+  function paint() {
+    for (var i = 0; i < targets.length; i++) {
+      var t = targets[i];
+      var shown = t.label.indexOf(buf) === 0;
+      t.node.style.display = shown ? 'block' : 'none';
+      if (!shown) continue;
+      t.node.innerHTML = '';
+      var hit = document.createElement('span');
+      hit.textContent = t.label.slice(0, buf.length);
+      hit.style.opacity = '0.45';
+      var rest = document.createElement('span');
+      rest.textContent = t.label.slice(buf.length);
+      t.node.appendChild(hit);
+      t.node.appendChild(rest);
+    }
+  }
+
+  function activate(el) {
+    teardown();
+    try {
+      if (typeof el.focus === 'function') el.focus({ preventScroll: true });
+      el.click();
+    } catch (e) {}
+  }
+
+  function onKey(e) {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); teardown(); return; }
+    if (e.key === 'Backspace') {
+      e.preventDefault(); e.stopPropagation();
+      buf = buf.slice(0, -1); paint(); return;
+    }
+    if (e.key.length !== 1 || CHARS.indexOf(e.key) === -1) return;
+    e.preventDefault(); e.stopPropagation();
+    buf += e.key;
+    var exact = null, partial = 0;
+    for (var i = 0; i < targets.length; i++) {
+      if (targets[i].label === buf) exact = targets[i].el;
+      if (targets[i].label.indexOf(buf) === 0) partial++;
+    }
+    if (exact) { activate(exact); return; }
+    if (partial === 0) { teardown(); return; }
+    paint();
+  }
+
+  window.__twigHints = function () {
+    teardown();
+    var found = candidates();
+    if (!found.length) return 0;
+    var labels = labelsFor(found.length);
+    layer = document.createElement('div');
+    layer.style.cssText = 'position:fixed;inset:0;z-index:2147483647;pointer-events:none;';
+    for (var i = 0; i < found.length; i++) {
+      var node = document.createElement('div');
+      node.textContent = labels[i];
+      node.style.cssText =
+        'position:fixed;top:' + Math.max(0, found[i].rect.top) + 'px;' +
+        'left:' + Math.max(0, found[i].rect.left) + 'px;' +
+        'transform:translate(-2px,-2px);' +
+        'background:#8fbb6e;color:#12140c;font:600 11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;' +
+        'padding:1px 4px;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.45);' +
+        'text-transform:uppercase;letter-spacing:.04em;pointer-events:none;';
+      layer.appendChild(node);
+      targets.push({ el: found[i].el, label: labels[i], node: node });
+    }
+    document.documentElement.appendChild(layer);
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('scroll', teardown, true);
+    paint();
+    return found.length;
+  };
+})();"#;
+
 /// Tab ids double as webview labels, which must be unique across the whole
 /// app - not just within one window - so this is a single shared counter
 /// rather than a per-window one.
@@ -438,6 +559,7 @@ fn spawn_webview<R: Runtime>(
             true
         });
     builder = builder.initialization_script(BUSY_TRACKER);
+    builder = builder.initialization_script(LINK_HINTS);
     if scroll_y > 0.0 {
         builder = builder.initialization_script(format!(
             "window.addEventListener('DOMContentLoaded', function () {{ window.scrollTo(0, {scroll_y}); }});"
@@ -1544,6 +1666,20 @@ pub struct MemoryStats {
     /// What those sleeping tabs would cost at the current average, if they
     /// were all awake. An estimate, and labelled as one in the UI.
     estimated_saved_kb: u64,
+}
+
+/// Starts link-hint mode in a tab: labels everything clickable in view so
+/// it can be reached by keyboard. The tab's own webview holds focus, so
+/// the whole interaction runs inside the page (see LINK_HINTS) rather
+/// than in the chrome.
+#[tauri::command]
+pub fn follow_link<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), String> {
+    if let Some(webview) = app.get_webview(&tab_label(&id)) {
+        webview
+            .eval("window.__twigHints && window.__twigHints()")
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 /// Live memory accounting for the current window.

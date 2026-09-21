@@ -8,7 +8,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { NewTabPage } from "./components/NewTabPage";
 import { useTabStore } from "./store/tabs";
 import { useSettingsStore } from "./store/settings";
-import { goBack, goForward, isNewTab, reloadTab, zoomTab } from "./lib/tabs";
+import { followLink, goBack, goForward, isNewTab, reloadTab, zoomTab } from "./lib/tabs";
 import "./App.css";
 
 function App() {
@@ -38,6 +38,9 @@ function App() {
           break;
         case "reload":
           if (store.activeId) reloadTab(store.activeId);
+          break;
+        case "follow-link":
+          if (store.activeId) followLink(store.activeId);
           break;
         case "go-back":
           if (store.activeId) goBack(store.activeId);
