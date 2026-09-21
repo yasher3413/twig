@@ -118,6 +118,20 @@ export function goForward(id: string): Promise<void> {
   return invoke("go_forward", { id });
 }
 
+export interface MemoryStats {
+  footprintKb: number;
+  processCount: number;
+  awakeTabs: number;
+  sleepingTabs: number;
+  estimatedSavedKb: number;
+}
+
+/** Live memory accounting. See memory_stats in tabs.rs for what's measured
+ *  exactly and what's an estimate. */
+export function memoryStats(): Promise<MemoryStats> {
+  return invoke("memory_stats");
+}
+
 /** Steps zoom on a tab: 1 in, -1 out, 0 reset. Returns the new level. */
 export function zoomTab(id: string, direction: number): Promise<number> {
   return invoke("zoom_tab", { id, direction });

@@ -1492,6 +1492,102 @@ pub fn clear_site_data<R: Runtime>(
 }
 
 // ---------------------------------------------------------------------
+// Memory accounting
+//
+// WKWebView renders out of process, and those WebContent processes are
+// XPC services parented to launchd rather than to us - so there's no
+// process tree to walk and no way to map one to a particular tab. What we
+// can do honestly is record which WebContent processes already existed
+// when twig started, and count anything that appears afterwards as ours.
+// ---------------------------------------------------------------------
+
+static BASELINE_WEBCONTENT: std::sync::OnceLock<std::collections::HashSet<u32>> =
+    std::sync::OnceLock::new();
+
+const WEBCONTENT: &str = "com.apple.WebKit.WebContent";
+
+/// (pid, resident kilobytes) for every WebContent process on the machine.
+fn webcontent_processes() -> Vec<(u32, u64)> {
+    let Ok(out) = std::process::Command::new("ps")
+        .args(["-axo", "pid=,rss=,comm="])
+        .output()
+    else {
+        return Vec::new();
+    };
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter(|line| line.contains(WEBCONTENT))
+        .filter_map(|line| {
+            let mut parts = line.split_whitespace();
+            let pid = parts.next()?.parse().ok()?;
+            let rss = parts.next()?.parse().ok()?;
+            Some((pid, rss))
+        })
+        .collect()
+}
+
+/// Remembers the WebContent processes that were already running, so later
+/// measurements can exclude other apps' tabs. Call once at startup, before
+/// any of our own webviews exist.
+pub fn snapshot_memory_baseline() {
+    let _ = BASELINE_WEBCONTENT.set(webcontent_processes().into_iter().map(|(pid, _)| pid).collect());
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryStats {
+    /// Resident kilobytes across the WebContent processes we started.
+    footprint_kb: u64,
+    process_count: usize,
+    awake_tabs: usize,
+    sleeping_tabs: usize,
+    /// What those sleeping tabs would cost at the current average, if they
+    /// were all awake. An estimate, and labelled as one in the UI.
+    estimated_saved_kb: u64,
+}
+
+/// Live memory accounting for the current window.
+#[tauri::command]
+pub fn memory_stats<R: Runtime>(
+    window: Window<R>,
+    manager: State<'_, TabManager>,
+) -> MemoryStats {
+    let baseline = BASELINE_WEBCONTENT.get();
+    let mine: Vec<(u32, u64)> = webcontent_processes()
+        .into_iter()
+        .filter(|(pid, _)| baseline.map(|b| !b.contains(pid)).unwrap_or(true))
+        .collect();
+    let footprint_kb: u64 = mine.iter().map(|(_, rss)| rss).sum();
+
+    let managers = manager.0.lock().unwrap();
+    let (awake_tabs, sleeping_tabs) = managers
+        .get(window.label())
+        .map(|inner| {
+            let awake = inner
+                .tabs
+                .iter()
+                .filter(|t| t.status == TabStatus::Hot && !t.url.is_empty())
+                .count();
+            (awake, inner.tabs.len() - awake)
+        })
+        .unwrap_or((0, 0));
+
+    let per_tab = if awake_tabs > 0 {
+        footprint_kb / awake_tabs as u64
+    } else {
+        0
+    };
+
+    MemoryStats {
+        footprint_kb,
+        process_count: mine.len(),
+        awake_tabs,
+        sleeping_tabs,
+        estimated_saved_kb: per_tab * sleeping_tabs as u64,
+    }
+}
+
+// ---------------------------------------------------------------------
 // Session persistence
 //
 // Restoring is cheap for the same reason hibernating is: a tab is a row,

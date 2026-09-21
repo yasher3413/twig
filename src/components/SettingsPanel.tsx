@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { clearSiteData, setOverlayActive } from "../lib/tabs";
+import { clearSiteData, memoryStats, setOverlayActive, type MemoryStats } from "../lib/tabs";
 import { clearHistory, historyCount } from "../lib/db";
 import {
   ACCENT_SWATCHES,
@@ -17,6 +17,11 @@ const THEME_OPTIONS: { id: ThemeMode; label: string }[] = [
   { id: "dark", label: "Dark" },
 ];
 
+function formatMb(kb: number): string {
+  if (kb >= 1024 * 1024) return `${(kb / 1024 / 1024).toFixed(1)} GB`;
+  return `${Math.round(kb / 1024)} MB`;
+}
+
 export function SettingsPanel() {
   const {
     panelOpen,
@@ -31,6 +36,7 @@ export function SettingsPanel() {
   } = useSettingsStore();
   const [pages, setPages] = useState(0);
   const [cleared, setCleared] = useState<string | null>(null);
+  const [memory, setMemory] = useState<MemoryStats | null>(null);
 
   useEffect(() => {
     const unlisten = listen<string>("menu-action", (event) => {
@@ -43,10 +49,14 @@ export function SettingsPanel() {
 
   useEffect(() => {
     setOverlayActive(panelOpen);
-    if (panelOpen) {
-      setCleared(null);
-      historyCount().then(setPages);
-    }
+    if (!panelOpen) return;
+    setCleared(null);
+    historyCount().then(setPages);
+
+    // Shelling out to ps for every sample, so poll gently.
+    memoryStats().then(setMemory);
+    const timer = setInterval(() => memoryStats().then(setMemory), 2000);
+    return () => clearInterval(timer);
   }, [panelOpen]);
 
   if (!panelOpen) return null;
@@ -125,9 +135,30 @@ export function SettingsPanel() {
 
           <section className="settings-group">
             <h3>Memory</h3>
+            <div className="ledger">
+              <div className="ledger-cell">
+                <span className="ledger-value">{formatMb(memory?.footprintKb ?? 0)}</span>
+                <span className="ledger-label">in use</span>
+              </div>
+              <div className="ledger-cell">
+                <span className="ledger-value">{memory?.awakeTabs ?? 0}</span>
+                <span className="ledger-label">awake</span>
+              </div>
+              <div className="ledger-cell">
+                <span className="ledger-value">{memory?.sleepingTabs ?? 0}</span>
+                <span className="ledger-label">asleep</span>
+              </div>
+              <div className="ledger-cell accent">
+                <span className="ledger-value">~{formatMb(memory?.estimatedSavedKb ?? 0)}</span>
+                <span className="ledger-label">not spent</span>
+              </div>
+            </div>
             <p className="settings-help">
               Tabs you haven&apos;t looked at in 10 minutes go to sleep, and only 5 stay awake at
-              once. Sleeping tabs give back their memory and wake up where you left them.
+              once. Sleeping tabs hand back their memory and wake where you left them — though a
+              tab that&apos;s playing something, or holding text you haven&apos;t sent, is left
+              alone. &ldquo;Not spent&rdquo; estimates what the sleeping ones would cost at the
+              current average.
             </p>
           </section>
 

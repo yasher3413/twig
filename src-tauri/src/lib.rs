@@ -192,6 +192,9 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            // Before any of our webviews exist, so other apps' WebContent
+            // processes can be told apart from ours later.
+            tabs::snapshot_memory_baseline();
             let main_window = app
                 .get_window(tabs::MAIN_WINDOW_LABEL)
                 .expect("main window declared in tauri.conf.json must exist");
@@ -224,6 +227,7 @@ pub fn run() {
             tabs::clear_site_data,
             tabs::set_search_engine,
             tabs::set_content_offset,
+            tabs::memory_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -114,6 +114,42 @@
   font-size: 11.5px;
 }
 
+/* Four plain readings, no chart. The numbers are the content. */
+.ledger {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--border);
+}
+
+.ledger-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 8px;
+  background: var(--surface);
+}
+
+.ledger-value {
+  font-size: 15px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.ledger-cell.accent .ledger-value {
+  color: var(--accent);
+}
+
+.ledger-label {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
 .settings-help {
   margin: 0 0 10px;
   max-width: 52ch;
