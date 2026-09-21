@@ -1,70 +1,189 @@
 .settings-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.25);
+  z-index: 1000;
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
+  background: color-mix(in srgb, var(--strip) 62%, transparent);
+  animation: settings-backdrop-in 0.16s var(--ease);
+}
+
+@keyframes settings-backdrop-in {
+  from {
+    opacity: 0;
+  }
 }
 
 .settings-panel {
-  width: 360px;
+  width: 440px;
   max-width: calc(100vw - 48px);
-  background: var(--bg);
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
-  padding: 4px 16px 16px;
+  border-radius: 14px;
+  box-shadow: var(--shadow-pop);
+  animation: settings-panel-in 0.2s var(--ease);
+}
+
+@keyframes settings-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
 }
 
 .settings-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 0;
-  font-weight: 600;
+  flex-shrink: 0;
+  padding: 14px 16px;
+  font-weight: 500;
+  font-size: 13.5px;
   color: var(--text);
   border-bottom: 1px solid var(--border);
-  margin-bottom: 14px;
+}
+
+.settings-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: default;
+  transition:
+    background-color 0.12s var(--ease),
+    color 0.12s var(--ease);
+}
+
+.settings-close:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+.settings-body {
+  overflow-y: auto;
+  padding: 4px 16px 16px;
+}
+
+.settings-group {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-group:last-child {
+  border-bottom: none;
+  padding-bottom: 2px;
+}
+
+/* More space above a heading than below it. */
+.settings-group h3 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
 }
 
 .settings-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 0;
+  gap: 16px;
+  padding: 6px 0;
 }
 
 .settings-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   color: var(--text);
   font-size: 13px;
 }
 
-.theme-options {
-  display: flex;
-  gap: 4px;
-  background: var(--row-hover);
-  border-radius: 8px;
-  padding: 2px;
+.settings-sub {
+  color: var(--text-muted);
+  font-size: 11.5px;
 }
 
-.theme-option {
+.settings-help {
+  margin: 0 0 10px;
+  max-width: 52ch;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.settings-done {
+  margin: 10px 0 0;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.segmented {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--field);
+}
+
+.segment {
   border: none;
   background: transparent;
   color: var(--text-muted);
   font: inherit;
   font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  padding: 5px 11px;
+  border-radius: 7px;
+  cursor: default;
+  transition:
+    background-color 0.12s var(--ease),
+    color 0.12s var(--ease);
 }
 
-.theme-option.selected {
-  background: var(--bg);
+.segment:hover {
   color: var(--text);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.segment.selected {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-raise);
+}
+
+.settings-button {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: default;
+  transition:
+    background-color 0.12s var(--ease),
+    border-color 0.12s var(--ease),
+    color 0.12s var(--ease);
+}
+
+.settings-button:hover:not(:disabled) {
+  background: var(--row-hover);
+  border-color: var(--text-muted);
+}
+
+.settings-button:disabled {
+  opacity: 0.4;
 }
 
 .accent-swatches {
@@ -77,9 +196,12 @@
   height: 20px;
   border-radius: 50%;
   border: 2px solid transparent;
-  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  cursor: default;
   padding: 0;
-  transition: border-color 0.12s ease, transform 0.12s ease;
+  transition:
+    border-color 0.12s var(--ease),
+    transform 0.12s var(--ease);
 }
 
 .accent-swatch:hover {

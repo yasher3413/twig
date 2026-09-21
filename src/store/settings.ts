@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { setSearchEngine } from "../lib/tabs";
 
 export type ThemeMode = "system" | "light" | "dark";
 
@@ -20,8 +21,22 @@ export const ACCENT_SWATCHES: AccentSwatch[] = [
   { id: "slate", label: "Slate", light: "#52564c", dark: "#9a9e8f" },
 ];
 
+export interface SearchEngine {
+  id: string;
+  label: string;
+  template: string;
+}
+
+export const SEARCH_ENGINES: SearchEngine[] = [
+  { id: "google", label: "Google", template: "https://www.google.com/search?q={}" },
+  { id: "duckduckgo", label: "DuckDuckGo", template: "https://duckduckgo.com/?q={}" },
+  { id: "brave", label: "Brave", template: "https://search.brave.com/search?q={}" },
+  { id: "bing", label: "Bing", template: "https://www.bing.com/search?q={}" },
+];
+
 const THEME_KEY = "twig:theme-mode";
 const ACCENT_KEY = "twig:accent";
+const SEARCH_KEY = "twig:search-engine";
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace("#", "");
@@ -38,10 +53,12 @@ function systemPrefersDark(): boolean {
 interface SettingsStore {
   themeMode: ThemeMode;
   accentId: string;
+  searchEngineId: string;
   panelOpen: boolean;
   init: () => void;
   setThemeMode: (mode: ThemeMode) => void;
   setAccent: (id: string) => void;
+  setSearchEngineId: (id: string) => void;
   togglePanel: () => void;
   closePanel: () => void;
 }
@@ -61,6 +78,13 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     }
   }
 
+  // URL building lives in Rust (normalize_url), so the choice has to be
+  // pushed across rather than read from here.
+  function applySearchEngine(id: string) {
+    const engine = SEARCH_ENGINES.find((e) => e.id === id) ?? SEARCH_ENGINES[0];
+    setSearchEngine(engine.template);
+  }
+
   function applyAccent(id: string) {
     const swatch = ACCENT_SWATCHES.find((s) => s.id === id) ?? ACCENT_SWATCHES[0];
     const hex = isDarkNow() ? swatch.dark : swatch.light;
@@ -72,6 +96,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
   return {
     themeMode: "system",
     accentId: "moss",
+    searchEngineId: "google",
     panelOpen: false,
     togglePanel() {
       set((s) => ({ panelOpen: !s.panelOpen }));
@@ -82,9 +107,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     init() {
       const storedTheme = (localStorage.getItem(THEME_KEY) as ThemeMode | null) ?? "system";
       const storedAccent = localStorage.getItem(ACCENT_KEY) ?? "moss";
-      set({ themeMode: storedTheme, accentId: storedAccent });
+      const storedSearch = localStorage.getItem(SEARCH_KEY) ?? "google";
+      set({ themeMode: storedTheme, accentId: storedAccent, searchEngineId: storedSearch });
       applyTheme(storedTheme);
       applyAccent(storedAccent);
+      applySearchEngine(storedSearch);
 
       // Keep the resolved accent in sync if the OS theme changes while
       // following "system" (the accent has separate light/dark hexes).
@@ -102,6 +129,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       localStorage.setItem(ACCENT_KEY, id);
       set({ accentId: id });
       applyAccent(id);
+    },
+    setSearchEngineId(id) {
+      localStorage.setItem(SEARCH_KEY, id);
+      set({ searchEngineId: id });
+      applySearchEngine(id);
     },
   };
 });

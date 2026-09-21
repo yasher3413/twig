@@ -77,6 +77,11 @@ export async function historyCount(): Promise<number> {
   return rows[0]?.n ?? 0;
 }
 
+/** Wipes local browsing history. Bookmarks are kept - they're explicit. */
+export async function clearHistory(): Promise<void> {
+  await db.execute("DELETE FROM history");
+}
+
 export async function addBookmark(url: string, title: string): Promise<void> {
   await db.execute(
     "INSERT INTO bookmarks (url, title, created_at) VALUES ($1, $2, $3) ON CONFLICT(url) DO NOTHING",
