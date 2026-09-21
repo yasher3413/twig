@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useTabStore } from "../store/tabs";
 import { useSettingsStore } from "../store/settings";
-import { goBack, goForward, isInternalUrl, reloadTab, setOverlayActive } from "../lib/tabs";
+import { goBack, goForward, isInternalUrl, reloadTab, setContentOffset } from "../lib/tabs";
 import {
   addBookmark,
   autocomplete,
@@ -87,11 +87,15 @@ export function AddressBar() {
     };
   });
 
-  // Build the suggestion list as you type. Private windows get search
-  // only - reading history there would defeat the point.
+  // Build the suggestion list as you type. Suggestions wait for an actual
+  // edit rather than appearing on focus: clicking into the bar selects the
+  // current URL, and matching on that would pop the list open every time
+  // you so much as clicked the field. Private windows get search only -
+  // reading history there would defeat the point.
   useEffect(() => {
     const q = draft.trim();
-    if (!editing || !q) {
+    const untouched = q === (internal ? "" : url);
+    if (!editing || !q || untouched) {
       setSuggestions([]);
       return;
     }
@@ -152,25 +156,31 @@ export function AddressBar() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [draft, editing, isPrivate, engineName]);
+  }, [draft, editing, isPrivate, engineName, internal, url]);
 
   // Tab content is a separate native webview stacked above the chrome, so
-  // the dropdown can only be seen if the page steps aside. Turning the
-  // overlay back off refocuses the page, so that waits until blur -
-  // toggling it per keystroke would yank the caret out of the field.
+  // the dropdown needs room that isn't already spoken for. Rather than
+  // hiding the page, push it down by exactly the height of the list and
+  // draw into the gap - the page stays visible and keeps its scroll.
+  const panelHeight = suggestions.length ? suggestions.length * 32 + 10 + 6 : 0;
+
   useEffect(() => {
-    const want = editing && suggestions.length > 0;
-    if (want && !overlayOn.current) {
-      overlayOn.current = true;
-      setOverlayActive(true);
-    }
-  }, [editing, suggestions.length]);
+    setContentOffset(editing ? panelHeight : 0);
+    overlayOn.current = panelHeight > 0;
+  }, [editing, panelHeight]);
+
+  // Covers unmount and tab switches, where no blur event arrives.
+  useEffect(() => {
+    return () => {
+      if (overlayOn.current) setContentOffset(0);
+    };
+  }, []);
 
   function releaseOverlay() {
     if (overlayOn.current) {
       overlayOn.current = false;
-      setOverlayActive(false);
     }
+    setContentOffset(0);
   }
 
   function commit(value?: string) {

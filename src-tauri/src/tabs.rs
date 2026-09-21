@@ -153,6 +153,11 @@ struct Inner {
     next_group_id: u64,
     tab_strip_visible: bool,
     closed_stack: Vec<ClosedTab>,
+    /// Extra pixels the visible webview is pushed down by, so chrome
+    /// popovers (the omnibox suggestions) have somewhere to land. Only the
+    /// position moves - the size is left alone so the page doesn't
+    /// re-layout, it just slides and clips at the bottom.
+    content_offset: f64,
     /// Private windows use a non-persistent webview data store (no cookies
     /// or site data written to disk) and skip history/bookmark recording
     /// on the frontend side.
@@ -174,6 +179,7 @@ impl Default for Inner {
             next_group_id: 1,
             tab_strip_visible: true,
             closed_stack: Vec::new(),
+            content_offset: 0.0,
             is_private: false,
         }
     }
@@ -302,8 +308,9 @@ fn content_area<R: Runtime>(window: &Window<R>, tab_strip_visible: bool) -> taur
 fn content_bounds<R: Runtime>(
     window: &Window<R>,
     tab_strip_visible: bool,
+    content_offset: f64,
 ) -> tauri::Result<(LogicalPosition<f64>, LogicalSize<f64>)> {
-    let y_offset = top_offset(window, tab_strip_visible);
+    let y_offset = top_offset(window, tab_strip_visible) + content_offset;
     let area = content_area(window, tab_strip_visible)?;
     Ok((LogicalPosition::new(0.0, y_offset), area))
 }
@@ -312,12 +319,13 @@ fn content_bounds<R: Runtime>(
 fn split_bounds<R: Runtime>(
     window: &Window<R>,
     tab_strip_visible: bool,
+    content_offset: f64,
 ) -> tauri::Result<(
     (LogicalPosition<f64>, LogicalSize<f64>),
     (LogicalPosition<f64>, LogicalSize<f64>),
 )> {
     let x_offset = 0.0;
-    let y_offset = top_offset(window, tab_strip_visible);
+    let y_offset = top_offset(window, tab_strip_visible) + content_offset;
     let area = content_area(window, tab_strip_visible)?;
     let half = ((area.width - SPLIT_GAP) / 2.0).max(0.0);
     let left = (LogicalPosition::new(x_offset, y_offset), LogicalSize::new(half, area.height));
@@ -340,9 +348,10 @@ fn spawn_webview<R: Runtime>(
     url: tauri::Url,
     scroll_y: f64,
     tab_strip_visible: bool,
+    content_offset: f64,
     incognito: bool,
 ) -> tauri::Result<Webview<R>> {
-    let (position, size) = content_bounds(window, tab_strip_visible)?;
+    let (position, size) = content_bounds(window, tab_strip_visible, content_offset)?;
     let label = tab_label(id);
     let app_handle = app.clone();
     let nav_id = id.to_string();
@@ -410,7 +419,7 @@ fn sync_visible_webviews<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, inn
     let group = inner.active_group();
     match &group.split_id {
         Some(split_id) => {
-            let Ok((left, right)) = split_bounds(window, inner.tab_strip_visible) else {
+            let Ok((left, right)) = split_bounds(window, inner.tab_strip_visible, inner.content_offset) else {
                 return;
             };
             if let Some(active) = &group.active_id {
@@ -419,7 +428,7 @@ fn sync_visible_webviews<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, inn
             place(app, split_id, right);
         }
         None => {
-            let Ok(bounds) = content_bounds(window, inner.tab_strip_visible) else {
+            let Ok(bounds) = content_bounds(window, inner.tab_strip_visible, inner.content_offset) else {
                 return;
             };
             if let Some(active) = &group.active_id {
@@ -476,6 +485,7 @@ fn hibernate<R: Runtime>(app: &AppHandle<R>, entry: &mut TabEntry) {
 /// callers are expected to follow up with `sync_visible_webviews`.
 fn wake<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, inner: &mut Inner, id: &str) -> Result<(), String> {
     let tab_strip_visible = inner.tab_strip_visible;
+    let content_offset = inner.content_offset;
     let is_private = inner.is_private;
     let entry = inner
         .tabs
@@ -486,7 +496,7 @@ fn wake<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, inner: &mut Inner, i
     // A new-tab-page tab has no webview to restore - the chrome draws it.
     if entry.status == TabStatus::Hibernated && !entry.url.is_empty() {
         let parsed: tauri::Url = entry.url.parse().map_err(|e| format!("invalid url: {e}"))?;
-        spawn_webview(app, window, id, parsed, entry.scroll_y, tab_strip_visible, is_private)
+        spawn_webview(app, window, id, parsed, entry.scroll_y, tab_strip_visible, content_offset, is_private)
             .map_err(|e| e.to_string())?;
     }
     entry.status = TabStatus::Hot;
@@ -591,7 +601,7 @@ fn open_tab<R: Runtime>(
     // That's why a new tab costs nothing until it holds a real page.
     if !url.is_empty() {
         let parsed = url.parse().map_err(|e| format!("invalid url: {e}"))?;
-        spawn_webview(app, window, &id, parsed, 0.0, inner.tab_strip_visible, inner.is_private)
+        spawn_webview(app, window, &id, parsed, 0.0, inner.tab_strip_visible, inner.content_offset, inner.is_private)
             .map_err(|e| e.to_string())?;
     }
 
@@ -949,6 +959,7 @@ pub fn navigate_tab<R: Runtime>(
     let mut managers = manager.0.lock().unwrap();
     let inner = inner_for(&mut managers, &window);
     let tab_strip_visible = inner.tab_strip_visible;
+    let content_offset = inner.content_offset;
     let is_private = inner.is_private;
     let entry = inner
         .tabs
@@ -969,7 +980,7 @@ pub fn navigate_tab<R: Runtime>(
         // First real navigation out of the new-tab page: this is where the
         // tab stops being free and actually gets a webview.
         None => {
-            spawn_webview(&app, &window, &id, parsed, 0.0, tab_strip_visible, is_private)
+            spawn_webview(&app, &window, &id, parsed, 0.0, tab_strip_visible, content_offset, is_private)
                 .map_err(|e| e.to_string())?;
         }
     }
@@ -978,6 +989,31 @@ pub fn navigate_tab<R: Runtime>(
     focus_active(&app, inner);
     emit_tabs_changed(&app, window.label(), inner);
     Ok(info)
+}
+
+/// Slides the visible webview(s) down by `offset` so a chrome popover can
+/// occupy the strip it leaves behind.
+///
+/// This is the gentler alternative to `set_overlay_active` for anything
+/// that isn't full-window: the page stays on screen instead of vanishing,
+/// nothing is resized so no page re-layouts, and because focus is never
+/// touched the caret stays wherever it was. The cost is that the bottom
+/// `offset` pixels of the page are pushed out of view until it's cleared.
+#[tauri::command]
+pub fn set_content_offset<R: Runtime>(
+    app: AppHandle<R>,
+    window: Window<R>,
+    manager: State<'_, TabManager>,
+    offset: f64,
+) -> Result<(), String> {
+    let mut managers = manager.0.lock().unwrap();
+    let inner = inner_for(&mut managers, &window);
+    if (inner.content_offset - offset).abs() < f64::EPSILON {
+        return Ok(());
+    }
+    inner.content_offset = offset.max(0.0);
+    sync_visible_webviews(&app, &window, inner);
+    Ok(())
 }
 
 /// Hides (or restores) the current space's visible webview(s) so

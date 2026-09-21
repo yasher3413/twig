@@ -45,6 +45,7 @@ fn migrations() -> Vec<Migration> {
 /// listener there would silently never fire once you've looked at a page.
 /// macOS dispatches menu key equivalents at the OS level before delivering
 /// to whichever view has focus, so this works regardless.
+///
 /// The menu is assembled by hand rather than extending `Menu::default()`.
 /// That default ships a Window submenu whose predefined "Close Window"
 /// already claims CmdOrCtrl+W, and macOS dispatches a duplicate key
@@ -221,6 +222,7 @@ pub fn run() {
             tabs::zoom_tab,
             tabs::clear_site_data,
             tabs::set_search_engine,
+            tabs::set_content_offset,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

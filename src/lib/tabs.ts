@@ -63,6 +63,13 @@ export function navigateTab(id: string, url: string): Promise<Tab> {
   return invoke("navigate_tab", { id, url });
 }
 
+/** Slides page content down so a chrome popover has room, without hiding
+ *  it. See set_content_offset in tabs.rs for why this beats the overlay
+ *  for anything that isn't full-window. */
+export function setContentOffset(offset: number): Promise<void> {
+  return invoke("set_content_offset", { offset });
+}
+
 export function setOverlayActive(open: boolean): Promise<void> {
   return invoke("set_overlay_active", { open });
 }
