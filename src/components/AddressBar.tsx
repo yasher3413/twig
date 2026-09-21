@@ -29,6 +29,29 @@ function looksLikeUrl(value: string): boolean {
   return value.includes("://") || (!value.includes(" ") && value.includes("."));
 }
 
+/// How a URL reads once the parts nobody types are stripped off, which is
+/// also the form worth completing to: "https://www.github.com/x" -> the
+/// "github.com/x" you'd actually have typed.
+function typeableForm(url: string): string {
+  return url.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
+}
+
+/// The shortest thing you've been to that starts with what you've typed,
+/// or null. Case-insensitive to match, but returns the stored spelling so
+/// the completion looks like the real URL.
+function inlineCompletion(typed: string, urls: string[]): string | null {
+  const probe = typed.toLowerCase();
+  if (!probe || probe.includes(" ")) return null;
+  let best: string | null = null;
+  for (const url of urls) {
+    const form = typeableForm(url);
+    if (form.toLowerCase().startsWith(probe) && form.length > typed.length) {
+      if (!best || form.length < best.length) best = form;
+    }
+  }
+  return best;
+}
+
 // Sits in the strip the backend reserves above tab content (see
 // ADDRESS_BAR_HEIGHT in src-tauri/src/tabs.rs) - the tab's own webview
 // never covers this band, so it's safe to draw here.
@@ -37,12 +60,21 @@ export function AddressBar() {
   const togglePanel = useSettingsStore((s) => s.togglePanel);
   const searchEngineId = useSettingsStore((s) => s.searchEngineId);
   const activeTab = tabs.find((t) => t.id === activeId) ?? null;
+  // `typed` is what you actually entered; `draft` is what's on screen,
+  // which may carry an inline completion after it. Keeping them apart is
+  // what stops a completion from being re-read as input and completed
+  // again on the next pass.
+  const [typed, setTyped] = useState("");
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [highlighted, setHighlighted] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const overlayOn = useRef(false);
+  // Deleting shouldn't re-complete: backspacing over a completion would
+  // otherwise put it straight back.
+  const allowComplete = useRef(true);
+  const pendingSelect = useRef<[number, number] | null>(null);
 
   const engineName =
     SEARCH_ENGINES.find((e) => e.id === searchEngineId)?.label ?? SEARCH_ENGINES[0].label;
@@ -53,7 +85,10 @@ export function AddressBar() {
   const [bookmarked, setBookmarked] = useState(false);
 
   useEffect(() => {
-    if (!editing) setDraft(internal ? "" : url);
+    if (!editing) {
+      setDraft(internal ? "" : url);
+      setTyped(internal ? "" : url);
+    }
   }, [url, internal, editing]);
 
   useEffect(() => {
@@ -93,7 +128,7 @@ export function AddressBar() {
   // you so much as clicked the field. Private windows get search only -
   // reading history there would defeat the point.
   useEffect(() => {
-    const q = draft.trim();
+    const q = typed.trim();
     const untouched = q === (internal ? "" : url);
     if (!editing || !q || untouched) {
       setSuggestions([]);
@@ -156,7 +191,33 @@ export function AddressBar() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [draft, editing, isPrivate, engineName, internal, url]);
+  }, [typed, editing, isPrivate, engineName, internal, url]);
+
+  // Inline completion: finish the URL in place and leave the added part
+  // selected, so typing over it replaces it and Tab or Enter takes it.
+  useEffect(() => {
+    if (!editing || !allowComplete.current) {
+      setDraft(typed);
+      return;
+    }
+    const pool = suggestions
+      .filter((s) => s.kind !== "search")
+      .map((s) => s.target);
+    const completed = inlineCompletion(typed, pool);
+    if (completed) {
+      setDraft(typed + completed.slice(typed.length));
+      pendingSelect.current = [typed.length, completed.length];
+    } else {
+      setDraft(typed);
+    }
+  }, [typed, suggestions, editing]);
+
+  useEffect(() => {
+    const range = pendingSelect.current;
+    if (!range || !inputRef.current) return;
+    pendingSelect.current = null;
+    inputRef.current.setSelectionRange(range[0], range[1]);
+  }, [draft]);
 
   // Tab content is a separate native webview stacked above the chrome, so
   // the dropdown needs room that isn't already spoken for. Rather than
@@ -186,6 +247,7 @@ export function AddressBar() {
   function commit(value?: string) {
     const target = (value ?? draft).trim();
     setSuggestions([]);
+    allowComplete.current = true;
     if (activeId && target) navigate(activeId, target);
     setEditing(false);
     releaseOverlay();
@@ -252,10 +314,16 @@ export function AddressBar() {
             setEditing(true);
             e.target.select();
           }}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => {
+            const kind = (e.nativeEvent as InputEvent).inputType || "";
+            allowComplete.current = !kind.startsWith("delete");
+            setTyped(e.target.value);
+            setDraft(e.target.value);
+          }}
           onBlur={() => {
             setEditing(false);
             setSuggestions([]);
+            allowComplete.current = true;
             releaseOverlay();
           }}
           onKeyDown={(e) => {
@@ -267,10 +335,18 @@ export function AddressBar() {
               setHighlighted((i) => (i - 1 + suggestions.length) % suggestions.length);
             } else if (e.key === "Enter") {
               e.preventDefault();
-              commit(suggestions[highlighted]?.target);
+              const chosen = highlighted > 0 ? suggestions[highlighted]?.target : draft;
+              commit(chosen);
+            } else if (e.key === "Tab" && draft !== typed) {
+              // Accept the completion rather than leaving the field.
+              e.preventDefault();
+              setTyped(draft);
+              inputRef.current?.setSelectionRange(draft.length, draft.length);
             } else if (e.key === "Escape") {
               setDraft(internal ? "" : url);
+              setTyped(internal ? "" : url);
               setSuggestions([]);
+              allowComplete.current = true;
               setEditing(false);
               releaseOverlay();
               inputRef.current?.blur();
