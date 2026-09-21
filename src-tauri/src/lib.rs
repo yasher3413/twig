@@ -35,6 +35,22 @@ fn migrations() -> Vec<Migration> {
             );",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 3,
+            description: "full-text index of visited pages",
+            // FTS5 ships in the bundled SQLite (libsqlite3-sys builds with
+            // -DSQLITE_ENABLE_FTS5). url is UNINDEXED: it's how rows are
+            // replaced, not something worth matching on - the omnibox
+            // already covers URLs.
+            sql: "CREATE VIRTUAL TABLE page_text USING fts5(
+                url UNINDEXED,
+                title,
+                body,
+                captured_at UNINDEXED,
+                tokenize = 'porter unicode61'
+            );",
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

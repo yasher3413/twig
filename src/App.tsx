@@ -9,6 +9,7 @@ import { NewTabPage } from "./components/NewTabPage";
 import { useTabStore } from "./store/tabs";
 import { useSettingsStore } from "./store/settings";
 import { followLink, goBack, goForward, isNewTab, reloadTab, zoomTab } from "./lib/tabs";
+import { indexPage } from "./lib/db";
 import "./App.css";
 
 function App() {
@@ -73,6 +74,16 @@ function App() {
       }
     });
 
+    // Rust lifts text out of each page once it settles; the index lives
+    // here because the database is only reachable from the chrome.
+    const unlistenCapture = listen<{ url: string; title: string; body: string }>(
+      "page-captured",
+      (event) => {
+        if (useTabStore.getState().isPrivate) return;
+        indexPage(event.payload.url, event.payload.title, event.payload.body).catch(() => {});
+      },
+    );
+
     const unlistenGoto = listen<string>("menu-goto-tab", (event) => {
       const store = useTabStore.getState();
       const n = parseInt(event.payload, 10);
@@ -84,6 +95,7 @@ function App() {
     return () => {
       unlistenAction.then((f) => f());
       unlistenGoto.then((f) => f());
+      unlistenCapture.then((f) => f());
     };
   }, []);
 

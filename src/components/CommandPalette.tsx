@@ -8,8 +8,10 @@ import {
   removeBookmark,
   searchBookmarks,
   searchHistory,
+  searchPages,
   type Bookmark,
   type HistoryEntry,
+  type PageMatch,
 } from "../lib/db";
 import "./CommandPalette.css";
 
@@ -33,6 +35,7 @@ export function CommandPalette() {
   const [selected, setSelected] = useState(0);
   const [historyMatches, setHistoryMatches] = useState<HistoryEntry[]>([]);
   const [bookmarkMatches, setBookmarkMatches] = useState<Bookmark[]>([]);
+  const [pageMatches, setPageMatches] = useState<PageMatch[]>([]);
   const [activeBookmarked, setActiveBookmarked] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -75,6 +78,9 @@ export function CommandPalette() {
     });
     searchBookmarks(query.trim()).then((rows) => {
       if (!cancelled) setBookmarkMatches(rows);
+    });
+    searchPages(query.trim()).then((rows) => {
+      if (!cancelled) setPageMatches(rows);
     });
     return () => {
       cancelled = true;
@@ -126,6 +132,20 @@ export function CommandPalette() {
       });
     }
 
+    // Pages matched on their actual text rather than their title. Shown
+    // last: an exact tab or bookmark is usually what you meant, and this
+    // is for the ones you can only half remember.
+    const seen = new Set(items.map((i) => i.sublabel));
+    for (const page of pageMatches) {
+      if (seen.has(page.url)) continue;
+      items.push({
+        key: `page-${page.url}`,
+        label: page.title || page.url,
+        sublabel: page.snippet.replace(/\[\[|\]\]/g, ""),
+        run: () => newTab(page.url),
+      });
+    }
+
     const commands: ResultItem[] = [
       { key: "cmd-new-tab", label: "New Tab", run: () => newTab() },
       { key: "cmd-new-private-window", label: "New Private Window", run: () => openPrivateWindow() },
@@ -161,7 +181,7 @@ export function CommandPalette() {
 
     return items;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, tabs, activeId, activeTab, activeBookmarked, historyMatches, bookmarkMatches, switchTo, newTab, close, navigate]);
+  }, [query, tabs, activeId, activeTab, activeBookmarked, historyMatches, bookmarkMatches, pageMatches, switchTo, newTab, close, navigate]);
 
   useEffect(() => {
     setSelected(0);

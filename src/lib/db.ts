@@ -103,9 +103,58 @@ export async function autocomplete(query: string, limit = 6): Promise<HistoryEnt
   return rows.map((r) => ({ id: r.id, url: r.url, title: r.title, visitedAt: r.visited_at }));
 }
 
+export interface PageMatch {
+  url: string;
+  title: string;
+  snippet: string;
+}
+
+/** Records a page's text in the local full-text index, replacing whatever
+ *  was there for that URL. */
+export async function indexPage(url: string, title: string, body: string): Promise<void> {
+  if (!url || isInternalUrl(url)) return;
+  await db.execute("DELETE FROM page_text WHERE url = $1", [url]);
+  await db.execute(
+    "INSERT INTO page_text (url, title, body, captured_at) VALUES ($1, $2, $3, $4)",
+    [url, title, body, Date.now()],
+  );
+}
+
+/** Searches the text of pages you've actually read, not just their titles.
+ *  `snippet` comes back with the matched terms wrapped in [[ ]] so the UI
+ *  can highlight them without re-finding the match. */
+export async function searchPages(query: string, limit = 8): Promise<PageMatch[]> {
+  const q = query.trim();
+  if (!q) return [];
+  // Quoted so FTS5 treats user input as terms rather than operators; a
+  // stray quote or AND would otherwise be a syntax error.
+  const match = q
+    .split(/\s+/)
+    .map((term) => `"${term.replace(/"/g, '""')}"`)
+    .join(" ");
+  try {
+    const rows = await db.select<{ url: string; title: string; snippet: string }[]>(
+      `SELECT url, title, snippet(page_text, 2, '[[', ']]', '…', 12) as snippet
+       FROM page_text WHERE page_text MATCH $1
+       ORDER BY rank
+       LIMIT $2`,
+      [match, limit],
+    );
+    return rows;
+  } catch {
+    // A malformed query shouldn't take the palette down with it.
+    return [];
+  }
+}
+
+export async function clearPageIndex(): Promise<void> {
+  await db.execute("DELETE FROM page_text");
+}
+
 /** Wipes local browsing history. Bookmarks are kept - they're explicit. */
 export async function clearHistory(): Promise<void> {
   await db.execute("DELETE FROM history");
+  await clearPageIndex();
 }
 
 export async function addBookmark(url: string, title: string): Promise<void> {

@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    webview::Color, AppHandle, Emitter, EventTarget, LogicalPosition, LogicalSize, Manager,
+    webview::{Color, PageLoadEvent}, AppHandle, Emitter, EventTarget, LogicalPosition, LogicalSize, Manager,
     Runtime, State, Theme, Webview, WebviewBuilder, WebviewUrl, WebviewWindowBuilder, Window,
     WindowEvent,
 };
@@ -268,6 +268,23 @@ pub struct TabsChangedPayload {
     pub active_group_id: String,
     pub tab_strip_visible: bool,
     pub is_private: bool,
+}
+
+/// Shape the capture script returns: title and body text.
+#[derive(Deserialize)]
+struct CapturedPage {
+    t: String,
+    b: String,
+}
+
+/// Emitted to the chrome so it can write the page into the local
+/// full-text index. The DB is reachable from the frontend, not from here.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct IndexedPage {
+    url: String,
+    title: String,
+    body: String,
 }
 
 /// A tab's last-known url/title/space, kept around after closing so it can
@@ -560,6 +577,41 @@ fn spawn_webview<R: Runtime>(
         });
     builder = builder.initialization_script(BUSY_TRACKER);
     builder = builder.initialization_script(LINK_HINTS);
+
+    // Once a page settles, lift its text out and hand it to the chrome to
+    // index. Private windows are skipped: the point of them is that
+    // nothing is written down.
+    if !incognito {
+        let indexer = app.clone();
+        builder = builder.on_page_load(move |webview, payload| {
+            if payload.event() != PageLoadEvent::Finished {
+                return;
+            }
+            let url = payload.url().to_string();
+            let handle = indexer.clone();
+            let _ = webview.eval_with_callback(
+                "JSON.stringify({t: document.title || '', b: (document.body ? document.body.innerText : '').slice(0, 40000)})",
+                move |raw| {
+                    // eval hands back a JSON string literal, so it needs
+                    // unwrapping once before it's an object.
+                    let Ok(inner) = serde_json::from_str::<String>(&raw) else {
+                        return;
+                    };
+                    let Ok(page) = serde_json::from_str::<CapturedPage>(&inner) else {
+                        return;
+                    };
+                    if page.b.trim().is_empty() {
+                        return;
+                    }
+                    let _ = handle.emit_to(
+                        EventTarget::webview(MAIN_WINDOW_LABEL),
+                        "page-captured",
+                        IndexedPage { url: url.clone(), title: page.t, body: page.b },
+                    );
+                },
+            );
+        });
+    }
     if scroll_y > 0.0 {
         builder = builder.initialization_script(format!(
             "window.addEventListener('DOMContentLoaded', function () {{ window.scrollTo(0, {scroll_y}); }});"
