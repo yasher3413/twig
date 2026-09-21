@@ -1,59 +1,128 @@
-/* Height must match TOP_BAR_HEIGHT in src-tauri/src/tabs.rs. */
+/* Height must match ADDRESS_BAR_HEIGHT in src-tauri/src/tabs.rs. `top` is
+   set inline (0, or below the tab strip) - and 0 is already below the
+   macOS title bar, since this webview's viewport starts under it. */
 .address-bar {
   position: fixed;
-  top: 0;
+  left: 0;
   right: 0;
-  height: 44px;
+  height: 46px;
+  z-index: 10;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 8px;
   padding: 0 10px;
-  background: var(--bg);
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
   -webkit-user-select: none;
   user-select: none;
 }
 
-.nav-button {
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  border-radius: 6px;
-  width: 26px;
-  height: 26px;
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 0 2px;
   flex-shrink: 0;
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  font-family: "Fraunces Wordmark", -apple-system, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  color: var(--accent);
 }
 
-.nav-button:hover {
+.private-badge {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.nav-group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.nav-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: default;
+  transition:
+    background-color 0.12s var(--ease),
+    color 0.12s var(--ease);
+}
+
+.nav-button:hover:not(:disabled) {
   background: var(--row-hover);
   color: var(--text);
 }
 
-.address-input {
+.nav-button:disabled {
+  opacity: 0.35;
+}
+
+/* The omnibox is the one element allowed to dominate this bar. */
+.omnibox {
   flex: 1;
   min-width: 0;
-  height: 28px;
-  margin-left: 6px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   padding: 0 12px;
   border: 1px solid transparent;
   border-radius: 999px;
-  background: var(--row-hover);
+  background: var(--field);
+  transition:
+    background-color 0.16s var(--ease),
+    border-color 0.16s var(--ease),
+    box-shadow 0.16s var(--ease);
+}
+
+.omnibox:hover {
+  border-color: var(--border);
+}
+
+.omnibox.focused {
+  background: var(--surface);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+
+.omnibox-lead {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.omnibox.focused .omnibox-lead {
+  color: var(--accent);
+}
+
+.omnibox-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
   color: var(--text);
   font: inherit;
   font-size: 12.5px;
   outline: none;
-  transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 
-.address-input:focus {
-  background: var(--bg);
-  border-color: var(--border);
-}
-
-.address-input::placeholder {
+.omnibox-input::placeholder {
   color: var(--text-muted);
+}
+
+.omnibox-input:disabled {
+  cursor: default;
 }

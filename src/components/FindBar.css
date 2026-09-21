@@ -1,22 +1,38 @@
+/* Floats over the top-right of the page rather than taking a row in the
+   chrome: find-in-page is transient, and a permanent slot for it would
+   cost every tab vertical space it almost never needs. `top` is set
+   inline to clear whatever chrome is currently showing. */
 .find-bar {
+  position: fixed;
+  right: 14px;
+  z-index: 30;
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin: 0 4px 8px;
-  padding: 4px 6px;
-  border-radius: var(--radius);
-  background: var(--row-hover);
+  gap: 2px;
+  padding: 5px 6px 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  animation: find-bar-in 0.18s var(--ease);
+}
+
+@keyframes find-bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
 }
 
 .find-input {
-  flex: 1;
+  width: 190px;
   min-width: 0;
   border: none;
   outline: none;
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
 }
 
 .find-input::placeholder {
@@ -25,20 +41,33 @@
 
 .find-nav,
 .find-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  padding: 0;
   border: none;
+  border-radius: 999px;
   background: transparent;
   color: var(--text-muted);
-  border-radius: 4px;
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  cursor: pointer;
-  font-size: 11px;
-  line-height: 1;
+  cursor: default;
+  transition:
+    background-color 0.12s var(--ease),
+    color 0.12s var(--ease);
 }
 
 .find-nav:hover,
 .find-close:hover {
-  background: var(--border);
+  background: var(--row-hover);
   color: var(--text);
+}
+
+.find-divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  flex-shrink: 0;
+  background: var(--border);
 }

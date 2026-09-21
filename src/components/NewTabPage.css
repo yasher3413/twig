@@ -1,0 +1,237 @@
+/* Fills the area below the chrome. `top` is set inline by App so it
+   clears whichever chrome rows are showing. */
+.newtab {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.newtab-inner {
+  width: 100%;
+  max-width: 620px;
+  margin: auto;
+  padding: 48px 28px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.newtab-mark {
+  margin: 0 0 22px;
+  font-family: "Fraunces Wordmark", -apple-system, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 46px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+  /* The one authored moment on this surface. */
+  animation: newtab-mark-in 0.5s var(--ease) both;
+}
+
+@keyframes newtab-mark-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+    filter: blur(6px);
+  }
+}
+
+.newtab-search {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  transition:
+    border-color 0.16s var(--ease),
+    box-shadow 0.16s var(--ease);
+}
+
+.newtab-search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-tint);
+  color: var(--accent);
+}
+
+.newtab-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14.5px;
+}
+
+.newtab-search input::placeholder {
+  color: var(--text-muted);
+}
+
+.newtab-section {
+  width: 100%;
+  margin-top: 34px;
+}
+
+.newtab-section h2 {
+  margin: 0 0 12px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.site-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+@media (max-width: 520px) {
+  .site-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.site {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  cursor: default;
+  transition:
+    background-color 0.16s var(--ease),
+    border-color 0.16s var(--ease),
+    transform 0.16s var(--ease);
+}
+
+.site:hover {
+  background: var(--surface);
+  border-color: var(--border);
+  transform: translateY(-1px);
+}
+
+.site-host {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.site:hover .site-host {
+  color: var(--text);
+}
+
+.site-mark {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.site-mark-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.bookmark-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bookmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 220px;
+  padding: 7px 13px 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  cursor: default;
+  font-size: 12.5px;
+  transition:
+    background-color 0.16s var(--ease),
+    border-color 0.16s var(--ease);
+}
+
+.bookmark:hover {
+  background: var(--surface);
+  border-color: var(--border-strong);
+}
+
+.bookmark span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookmark .site-mark {
+  width: 17px;
+  height: 17px;
+  border-radius: 4px;
+}
+
+.newtab-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 44ch;
+  margin: 30px 0 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.newtab-stat {
+  display: flex;
+  gap: 18px;
+  padding: 0 0 20px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.newtab-stat span {
+  position: relative;
+}
+
+.newtab-stat span + span::before {
+  content: "";
+  position: absolute;
+  left: -9px;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}

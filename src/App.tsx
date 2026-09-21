@@ -1,14 +1,23 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { Sidebar } from "./components/Sidebar";
+import { TabStrip } from "./components/TabStrip";
 import { AddressBar } from "./components/AddressBar";
+import { FindBar } from "./components/FindBar";
 import { CommandPalette } from "./components/CommandPalette";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { NewTabPage } from "./components/NewTabPage";
 import { useTabStore } from "./store/tabs";
 import { useSettingsStore } from "./store/settings";
+import { isNewTab } from "./lib/tabs";
 import "./App.css";
 
 function App() {
+  const { tabs, activeId, splitId } = useTabStore();
+  const activeTab = tabs.find((t) => t.id === activeId) ?? null;
+  // A tab with no URL has no webview of its own, so this is what fills the
+  // window for it. Never during a split - that pairs two real pages.
+  const showNewTab = !!activeTab && isNewTab(activeTab.url) && !splitId;
+
   useEffect(() => {
     useSettingsStore.getState().init();
 
@@ -24,8 +33,8 @@ function App() {
         case "reopen-closed-tab":
           store.reopenClosed();
           break;
-        case "toggle-sidebar":
-          store.toggleSidebar();
+        case "toggle-tab-strip":
+          store.toggleTabStrip();
           break;
         // "command-palette", "find-in-page", and "settings" are handled by
         // those components directly.
@@ -48,8 +57,10 @@ function App() {
 
   return (
     <>
-      <Sidebar />
+      <TabStrip />
       <AddressBar />
+      {showNewTab && <NewTabPage />}
+      <FindBar />
       <CommandPalette />
       <SettingsPanel />
     </>

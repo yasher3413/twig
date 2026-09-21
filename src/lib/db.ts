@@ -1,4 +1,5 @@
 import Database from "@tauri-apps/plugin-sql";
+import { isInternalUrl } from "./tabs";
 
 // Connection is established lazily on first query; must match the db_url
 // passed to add_migrations in src-tauri/src/lib.rs.
@@ -32,7 +33,7 @@ interface BookmarkRow {
 
 /** Records a page visit. No-ops for the blank new-tab page. */
 export async function recordVisit(url: string, title: string): Promise<void> {
-  if (!url || url === "about:blank") return;
+  if (!url || isInternalUrl(url)) return;
   await db.execute("INSERT INTO history (url, title, visited_at) VALUES ($1, $2, $3)", [
     url,
     title,
@@ -52,6 +53,28 @@ export async function searchHistory(query: string, limit = 5): Promise<HistoryEn
     [like, limit],
   );
   return rows.map((r) => ({ id: r.id, url: r.url, title: r.title, visitedAt: r.visited_at }));
+}
+
+/** Most-visited pages, for the new tab page. Ranked by visit count so the
+ *  grid stays stable instead of reshuffling after every single page view. */
+export async function topSites(limit = 8): Promise<HistoryEntry[]> {
+  const rows = await db.select<HistoryRow[]>(
+    `SELECT MIN(id) as id, url, title, MAX(visited_at) as visited_at FROM history
+     GROUP BY url
+     ORDER BY COUNT(*) DESC, MAX(visited_at) DESC
+     LIMIT $1`,
+    [limit],
+  );
+  return rows.map((r) => ({ id: r.id, url: r.url, title: r.title, visitedAt: r.visited_at }));
+}
+
+/** Total distinct pages recorded - shown on the new tab page so it's
+ *  obvious that history exists and is local. */
+export async function historyCount(): Promise<number> {
+  const rows = await db.select<{ n: number }[]>(
+    "SELECT COUNT(DISTINCT url) as n FROM history",
+  );
+  return rows[0]?.n ?? 0;
 }
 
 export async function addBookmark(url: string, title: string): Promise<void> {

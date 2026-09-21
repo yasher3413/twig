@@ -1,0 +1,224 @@
+/* Height must match TAB_STRIP_HEIGHT in src-tauri/src/tabs.rs. Like the
+   address bar, top:0 is already below the macOS title bar - this webview's
+   viewport starts under it. */
+.tab-strip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 38px;
+  z-index: 11;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 0 8px;
+  background: var(--strip);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.tab-track {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.tab-track::-webkit-scrollbar {
+  display: none;
+}
+
+.tab-empty {
+  align-self: center;
+  padding-left: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* Tabs are top-rounded only: the active one shares --surface with the
+   toolbar below so the two read as a single continuous plane. */
+.tab {
+  position: relative;
+  flex: 1 1 190px;
+  min-width: 52px;
+  max-width: 220px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border-radius: 9px 9px 0 0;
+  cursor: default;
+  color: var(--text-muted);
+  background: transparent;
+  transition:
+    background-color 0.16s var(--ease),
+    color 0.16s var(--ease);
+}
+
+.tab:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+.tab.active {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* The two small wings that make an active tab look joined to the toolbar
+   instead of floating above it. */
+.tab.active::before,
+.tab.active::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: 9px;
+  height: 9px;
+  background: var(--surface);
+}
+
+.tab.active::before {
+  left: -9px;
+  border-bottom-right-radius: 9px;
+  box-shadow: 4px 0 0 0 var(--surface);
+  clip-path: inset(0 0 0 50%);
+}
+
+.tab.active::after {
+  right: -9px;
+  border-bottom-left-radius: 9px;
+  box-shadow: -4px 0 0 0 var(--surface);
+  clip-path: inset(0 50% 0 0);
+}
+
+.tab.split {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.tab.dragging {
+  opacity: 0.35;
+}
+
+.tab.drop-before::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  clip-path: none;
+  box-shadow: none;
+}
+
+.tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+}
+
+/* Present on every tab so titles never shift when one falls asleep; it
+   only takes on color once the tab is actually hibernated. */
+.tab-dot {
+  width: 5px;
+  height: 5px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: transparent;
+  transition: background-color 0.16s var(--ease);
+}
+
+.tab.hibernated .tab-dot {
+  background: var(--border-strong);
+}
+
+.tab.hibernated .tab-title {
+  opacity: 0.55;
+}
+
+.tab-action {
+  display: none;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: default;
+  transition:
+    background-color 0.12s var(--ease),
+    color 0.12s var(--ease);
+}
+
+.tab:hover .tab-action,
+.tab.active .tab-action {
+  display: inline-flex;
+}
+
+.tab-action:hover {
+  background: var(--border-strong);
+  color: var(--text);
+}
+
+.tab.split .tab-split {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.tab-tail {
+  position: relative;
+  flex: 1 0 24px;
+  min-width: 24px;
+  height: 30px;
+}
+
+.tab-tail.drop-before::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.tab-new {
+  flex-shrink: 0;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-bottom: 2px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: default;
+  transition:
+    background-color 0.12s var(--ease),
+    color 0.12s var(--ease);
+}
+
+.tab-new:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}

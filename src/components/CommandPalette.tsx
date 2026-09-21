@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useTabStore } from "../store/tabs";
-import { openPrivateWindow, setOverlayActive } from "../lib/tabs";
+import { isInternalUrl, openPrivateWindow, setOverlayActive } from "../lib/tabs";
 import {
   addBookmark,
   isBookmarked,
@@ -58,7 +58,7 @@ export function CommandPalette() {
       setQuery("");
       setSelected(0);
       requestAnimationFrame(() => inputRef.current?.focus());
-      if (activeTab) {
+      if (activeTab && !isInternalUrl(activeTab.url)) {
         isBookmarked(activeTab.url).then(setActiveBookmarked);
       } else {
         setActiveBookmarked(false);
@@ -82,7 +82,7 @@ export function CommandPalette() {
   }, [open, query]);
 
   async function toggleActiveBookmark() {
-    if (!activeTab) return;
+    if (!activeTab || isInternalUrl(activeTab.url)) return;
     if (activeBookmarked) {
       await removeBookmark(activeTab.url);
     } else {
@@ -96,13 +96,14 @@ export function CommandPalette() {
     const items: ResultItem[] = [];
 
     for (const tab of tabs) {
-      if (q && !tab.title.toLowerCase().includes(q) && !tab.url.toLowerCase().includes(q)) {
+      const internal = isInternalUrl(tab.url);
+      if (q && !tab.title.toLowerCase().includes(q) && !(!internal && tab.url.toLowerCase().includes(q))) {
         continue;
       }
       items.push({
         key: `tab-${tab.id}`,
         label: tab.title,
-        sublabel: tab.url,
+        sublabel: internal ? undefined : tab.url,
         run: () => switchTo(tab.id),
       });
     }

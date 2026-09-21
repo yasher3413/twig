@@ -6,19 +6,24 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{
-    AppHandle, Emitter, EventTarget, LogicalPosition, LogicalSize, Manager, Runtime, State,
-    Webview, WebviewBuilder, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent,
+    webview::Color, AppHandle, Emitter, EventTarget, LogicalPosition, LogicalSize, Manager,
+    Runtime, State, Theme, Webview, WebviewBuilder, WebviewUrl, WebviewWindowBuilder, Window,
+    WindowEvent,
 };
 
-/// Width, in logical pixels, reserved on the left edge of the window for the
-/// sidebar chrome (vertical tab list, spaces, etc). Tab content webviews are
-/// positioned to the right of this strip so the two never overlap.
-pub const SIDEBAR_WIDTH: f64 = 240.0;
+/// Height, in logical pixels, of the horizontal tab strip. Hidden entirely
+/// when `tab_strip_visible` is off, which is what Cmd+B toggles.
+pub const TAB_STRIP_HEIGHT: f64 = 38.0;
 
-/// Height, in logical pixels, reserved above tab content for the address
-/// bar. Drawn by the chrome webview in the strip this leaves uncovered,
-/// exactly like the sidebar reserves its own width.
-pub const TOP_BAR_HEIGHT: f64 = 44.0;
+/// Height, in logical pixels, of the toolbar row holding the omnibox.
+/// Always present - it's the only way to type a URL without the palette.
+pub const ADDRESS_BAR_HEIGHT: f64 = 46.0;
+
+/// Total chrome the window reserves above tab content. Tab webviews are
+/// positioned below this band so the two never overlap.
+fn chrome_height(tab_strip_visible: bool) -> f64 {
+    ADDRESS_BAR_HEIGHT + if tab_strip_visible { TAB_STRIP_HEIGHT } else { 0.0 }
+}
 
 /// Gap, in logical pixels, between the two panes in split view.
 const SPLIT_GAP: f64 = 1.0;
@@ -41,7 +46,6 @@ const IDLE_SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 const CLOSED_STACK_CAP: usize = 20;
 
 pub const MAIN_WINDOW_LABEL: &str = "main";
-const DEFAULT_TAB_URL: &str = "about:blank";
 const DEFAULT_TAB_TITLE: &str = "New Tab";
 
 /// Tab ids double as webview labels, which must be unique across the whole
@@ -84,7 +88,7 @@ pub struct TabsChangedPayload {
     pub split_id: Option<String>,
     pub groups: Vec<GroupInfo>,
     pub active_group_id: String,
-    pub sidebar_visible: bool,
+    pub tab_strip_visible: bool,
     pub is_private: bool,
 }
 
@@ -139,7 +143,7 @@ struct Inner {
     groups: Vec<Group>,
     active_group_id: String,
     next_group_id: u64,
-    sidebar_visible: bool,
+    tab_strip_visible: bool,
     closed_stack: Vec<ClosedTab>,
     /// Private windows use a non-persistent webview data store (no cookies
     /// or site data written to disk) and skip history/bookmark recording
@@ -160,7 +164,7 @@ impl Default for Inner {
             groups: vec![first_group],
             active_group_id: "1".to_string(),
             next_group_id: 1,
-            sidebar_visible: true,
+            tab_strip_visible: true,
             closed_stack: Vec::new(),
             is_private: false,
         }
@@ -208,7 +212,7 @@ impl Inner {
                 })
                 .collect(),
             active_group_id: self.active_group_id.clone(),
-            sidebar_visible: self.sidebar_visible,
+            tab_strip_visible: self.tab_strip_visible,
             is_private: self.is_private,
         }
     }
@@ -239,41 +243,76 @@ fn tab_label(id: &str) -> String {
     format!("tab-{id}")
 }
 
-/// The window area available for tab content: the full window, minus the
-/// sidebar's width when it's shown and the address bar's height.
-fn content_area<R: Runtime>(window: &Window<R>, sidebar_visible: bool) -> tauri::Result<LogicalSize<f64>> {
-    let x_offset = if sidebar_visible { SIDEBAR_WIDTH } else { 0.0 };
+/// How much of the window's height the title bar overlays.
+///
+/// Child webviews are positioned against the window's *content view*,
+/// which on macOS spans the full window height (`window.inner_size()`
+/// reports 800pt for an 800pt window) with the title bar drawn on top of
+/// its first ~32pt. The chrome webview's own CSS viewport, by contrast,
+/// already starts below the title bar (`window.innerHeight` comes back
+/// 768) - so this offset belongs only on the child-webview side, and the
+/// chrome must not apply it again. Queried live via `contentLayoutRect`
+/// rather than hardcoded, since it varies with OS version and the user's
+/// accessibility text-size settings.
+#[cfg(target_os = "macos")]
+fn native_title_bar_height<R: Runtime>(window: &Window<R>) -> f64 {
+    let Ok(ptr) = window.ns_window() else {
+        return 0.0;
+    };
+    let Some(ns_window) =
+        (unsafe { objc2::rc::Retained::retain(ptr as *mut objc2_app_kit::NSWindow) })
+    else {
+        return 0.0;
+    };
+    (ns_window.frame().size.height - ns_window.contentLayoutRect().size.height).max(0.0)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn native_title_bar_height<R: Runtime>(_window: &Window<R>) -> f64 {
+    0.0
+}
+
+/// Where tab content starts, in window coordinates: below both the title
+/// bar overlay and the chrome the webview draws beneath it.
+fn top_offset<R: Runtime>(window: &Window<R>, tab_strip_visible: bool) -> f64 {
+    native_title_bar_height(window) + chrome_height(tab_strip_visible)
+}
+
+/// The window area available for tab content: the full window width, minus
+/// the chrome band along the top.
+fn content_area<R: Runtime>(window: &Window<R>, tab_strip_visible: bool) -> tauri::Result<LogicalSize<f64>> {
     let scale = window.scale_factor()?;
     let logical = window.inner_size()?.to_logical::<f64>(scale);
     Ok(LogicalSize::new(
-        (logical.width - x_offset).max(0.0),
-        (logical.height - TOP_BAR_HEIGHT).max(0.0),
+        logical.width.max(0.0),
+        (logical.height - top_offset(window, tab_strip_visible)).max(0.0),
     ))
 }
 
 fn content_bounds<R: Runtime>(
     window: &Window<R>,
-    sidebar_visible: bool,
+    tab_strip_visible: bool,
 ) -> tauri::Result<(LogicalPosition<f64>, LogicalSize<f64>)> {
-    let x_offset = if sidebar_visible { SIDEBAR_WIDTH } else { 0.0 };
-    let area = content_area(window, sidebar_visible)?;
-    Ok((LogicalPosition::new(x_offset, TOP_BAR_HEIGHT), area))
+    let y_offset = top_offset(window, tab_strip_visible);
+    let area = content_area(window, tab_strip_visible)?;
+    Ok((LogicalPosition::new(0.0, y_offset), area))
 }
 
 /// Left/right bounds for the two panes in split view.
 fn split_bounds<R: Runtime>(
     window: &Window<R>,
-    sidebar_visible: bool,
+    tab_strip_visible: bool,
 ) -> tauri::Result<(
     (LogicalPosition<f64>, LogicalSize<f64>),
     (LogicalPosition<f64>, LogicalSize<f64>),
 )> {
-    let x_offset = if sidebar_visible { SIDEBAR_WIDTH } else { 0.0 };
-    let area = content_area(window, sidebar_visible)?;
+    let x_offset = 0.0;
+    let y_offset = top_offset(window, tab_strip_visible);
+    let area = content_area(window, tab_strip_visible)?;
     let half = ((area.width - SPLIT_GAP) / 2.0).max(0.0);
-    let left = (LogicalPosition::new(x_offset, TOP_BAR_HEIGHT), LogicalSize::new(half, area.height));
+    let left = (LogicalPosition::new(x_offset, y_offset), LogicalSize::new(half, area.height));
     let right = (
-        LogicalPosition::new(x_offset + half + SPLIT_GAP, TOP_BAR_HEIGHT),
+        LogicalPosition::new(x_offset + half + SPLIT_GAP, y_offset),
         LogicalSize::new(half, area.height),
     );
     Ok((left, right))
@@ -290,15 +329,24 @@ fn spawn_webview<R: Runtime>(
     id: &str,
     url: tauri::Url,
     scroll_y: f64,
-    sidebar_visible: bool,
+    tab_strip_visible: bool,
     incognito: bool,
 ) -> tauri::Result<Webview<R>> {
-    let (position, size) = content_bounds(window, sidebar_visible)?;
+    let (position, size) = content_bounds(window, tab_strip_visible)?;
     let label = tab_label(id);
     let app_handle = app.clone();
     let nav_id = id.to_string();
+    // Matches whatever the OS reports (light/dark) so the brief placeholder
+    // shown before a page's own background paints - visible on every fresh
+    // webview, not just new tabs - reads as an intentional loading state
+    // instead of a stray gray flash.
+    let backdrop = match window.theme() {
+        Ok(Theme::Dark) => Color(23, 25, 15, 255),
+        _ => Color(246, 244, 238, 255),
+    };
     let mut builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
         .incognito(incognito)
+        .background_color(backdrop)
         .on_navigation(move |url| {
             // Keeps our stored URL (and the address bar) in sync with
             // real in-page navigation - link clicks, redirects, JS
@@ -351,7 +399,7 @@ fn sync_visible_webviews<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, inn
     let group = inner.active_group();
     match &group.split_id {
         Some(split_id) => {
-            let Ok((left, right)) = split_bounds(window, inner.sidebar_visible) else {
+            let Ok((left, right)) = split_bounds(window, inner.tab_strip_visible) else {
                 return;
             };
             if let Some(active) = &group.active_id {
@@ -360,7 +408,7 @@ fn sync_visible_webviews<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, inn
             place(app, split_id, right);
         }
         None => {
-            let Ok(bounds) = content_bounds(window, inner.sidebar_visible) else {
+            let Ok(bounds) = content_bounds(window, inner.tab_strip_visible) else {
                 return;
             };
             if let Some(active) = &group.active_id {
@@ -397,7 +445,9 @@ fn capture_scroll<R: Runtime>(webview: &Webview<R>) -> Result<f64, String> {
 /// Tears down a hot tab's webview, capturing its scroll position first on a
 /// best-effort basis. No-op if the tab is already hibernated.
 fn hibernate<R: Runtime>(app: &AppHandle<R>, entry: &mut TabEntry) {
-    if entry.status == TabStatus::Hibernated {
+    // An empty-url tab holds no webview in the first place, so there's
+    // nothing to reclaim and nothing to show as sleeping.
+    if entry.status == TabStatus::Hibernated || entry.url.is_empty() {
         return;
     }
     let label = tab_label(&entry.id);
@@ -414,7 +464,7 @@ fn hibernate<R: Runtime>(app: &AppHandle<R>, entry: &mut TabEntry) {
 /// and marks it as just-viewed. Doesn't touch position or visibility -
 /// callers are expected to follow up with `sync_visible_webviews`.
 fn wake<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, inner: &mut Inner, id: &str) -> Result<(), String> {
-    let sidebar_visible = inner.sidebar_visible;
+    let tab_strip_visible = inner.tab_strip_visible;
     let is_private = inner.is_private;
     let entry = inner
         .tabs
@@ -422,9 +472,10 @@ fn wake<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, inner: &mut Inner, i
         .find(|t| t.id == id)
         .ok_or_else(|| format!("no such tab: {id}"))?;
 
-    if entry.status == TabStatus::Hibernated {
+    // A new-tab-page tab has no webview to restore - the chrome draws it.
+    if entry.status == TabStatus::Hibernated && !entry.url.is_empty() {
         let parsed: tauri::Url = entry.url.parse().map_err(|e| format!("invalid url: {e}"))?;
-        spawn_webview(app, window, id, parsed, entry.scroll_y, sidebar_visible, is_private)
+        spawn_webview(app, window, id, parsed, entry.scroll_y, tab_strip_visible, is_private)
             .map_err(|e| e.to_string())?;
     }
     entry.status = TabStatus::Hot;
@@ -521,13 +572,17 @@ fn open_tab<R: Runtime>(
     url: String,
     title: String,
 ) -> Result<TabInfo, String> {
-    let parsed = url.parse().map_err(|e| format!("invalid url: {e}"))?;
-
     let id = (NEXT_TAB_ID.fetch_add(1, Ordering::Relaxed) + 1).to_string();
     let group_id = inner.active_group_id.clone();
 
-    spawn_webview(app, window, &id, parsed, 0.0, inner.sidebar_visible, inner.is_private)
-        .map_err(|e| e.to_string())?;
+    // An empty url is the new-tab page, which the chrome webview draws
+    // itself - no child webview is created until you actually navigate.
+    // That's why a new tab costs nothing until it holds a real page.
+    if !url.is_empty() {
+        let parsed = url.parse().map_err(|e| format!("invalid url: {e}"))?;
+        spawn_webview(app, window, &id, parsed, 0.0, inner.tab_strip_visible, inner.is_private)
+            .map_err(|e| e.to_string())?;
+    }
 
     let (prev_active, prev_split) = {
         let group = inner.active_group();
@@ -571,7 +626,7 @@ pub fn create_tab<R: Runtime>(
     manager: State<'_, TabManager>,
     url: Option<String>,
 ) -> Result<TabInfo, String> {
-    let url = url.unwrap_or_else(|| DEFAULT_TAB_URL.to_string());
+    let url = url.unwrap_or_default();
 
     let mut managers = manager.0.lock().unwrap();
     let inner = inner_for(&mut managers, &window);
@@ -827,14 +882,21 @@ mod reorder_tests {
     }
 }
 
-/// Adds `https://` to a bare host/query typed into the command palette
-/// (e.g. "example.com") if it doesn't already look like a full URL.
+/// Turns whatever was typed into the address bar or command palette into a
+/// real URL: a bare host like "example.com" gets `https://` added, and
+/// anything that doesn't look like a URL at all (e.g. "rust borrow checker")
+/// becomes a search instead of failing to parse.
 fn normalize_url(input: &str) -> String {
     let trimmed = input.trim();
     if trimmed.contains("://") {
-        trimmed.to_string()
-    } else {
+        return trimmed.to_string();
+    }
+    let looks_like_url = !trimmed.contains(' ') && trimmed.contains('.');
+    if looks_like_url {
         format!("https://{trimmed}")
+    } else {
+        let query: String = url::form_urlencoded::byte_serialize(trimmed.as_bytes()).collect();
+        format!("https://www.google.com/search?q={query}")
     }
 }
 
@@ -858,6 +920,8 @@ pub fn navigate_tab<R: Runtime>(
 
     let mut managers = manager.0.lock().unwrap();
     let inner = inner_for(&mut managers, &window);
+    let tab_strip_visible = inner.tab_strip_visible;
+    let is_private = inner.is_private;
     let entry = inner
         .tabs
         .iter_mut()
@@ -867,14 +931,23 @@ pub fn navigate_tab<R: Runtime>(
     entry.url = parsed.to_string();
     entry.title = derive_title(&parsed);
     entry.scroll_y = 0.0;
+    entry.status = TabStatus::Hot;
+    entry.last_active_at = Instant::now();
 
-    if entry.status == TabStatus::Hot {
-        if let Some(webview) = app.get_webview(&tab_label(&id)) {
-            webview.navigate(parsed).map_err(|e| e.to_string())?;
+    let info = entry.to_info();
+
+    match app.get_webview(&tab_label(&id)) {
+        Some(webview) => webview.navigate(parsed).map_err(|e| e.to_string())?,
+        // First real navigation out of the new-tab page: this is where the
+        // tab stops being free and actually gets a webview.
+        None => {
+            spawn_webview(&app, &window, &id, parsed, 0.0, tab_strip_visible, is_private)
+                .map_err(|e| e.to_string())?;
         }
     }
 
-    let info = entry.to_info();
+    sync_visible_webviews(&app, &window, inner);
+    focus_active(&app, inner);
     emit_tabs_changed(&app, window.label(), inner);
     Ok(info)
 }
@@ -1112,21 +1185,21 @@ pub fn reopen_closed_tab<R: Runtime>(
     Ok(Some(info))
 }
 
-/// Shows or hides the sidebar, returning the new state. Hiding it lets the
-/// active tab's webview expand to cover the full window - it isn't a
-/// separate "collapsed" layout, just a width of zero.
+/// Shows or hides the tab strip, returning the new state. Hiding it gives
+/// the active tab's webview that much more height - it isn't a separate
+/// "collapsed" layout, just one row removed from the chrome band.
 #[tauri::command]
-pub fn toggle_sidebar<R: Runtime>(
+pub fn toggle_tab_strip<R: Runtime>(
     app: AppHandle<R>,
     window: Window<R>,
     manager: State<'_, TabManager>,
 ) -> Result<bool, String> {
     let mut managers = manager.0.lock().unwrap();
     let inner = inner_for(&mut managers, &window);
-    inner.sidebar_visible = !inner.sidebar_visible;
+    inner.tab_strip_visible = !inner.tab_strip_visible;
     sync_visible_webviews(&app, &window, inner);
     emit_tabs_changed(&app, window.label(), inner);
-    Ok(inner.sidebar_visible)
+    Ok(inner.tab_strip_visible)
 }
 
 /// Finds `query` in the active tab's page via the browser's native

@@ -21,8 +21,22 @@ export interface TabsChangedPayload {
   splitId: string | null;
   groups: Group[];
   activeGroupId: string;
-  sidebarVisible: boolean;
+  tabStripVisible: boolean;
   isPrivate: boolean;
+}
+
+/// Whether a tab's URL is one of our own internal pages (the new tab page,
+/// currently a `data:` URL) rather than something the user navigated to -
+/// used to keep the address bar, history, and command palette from showing
+/// a raw base64 blob.
+export function isInternalUrl(url: string): boolean {
+  return url === "" || url.startsWith("data:") || url === "about:blank";
+}
+
+/** A tab with no URL yet: the chrome draws the new tab page for it and no
+ *  webview exists, which is why an empty tab costs nothing. */
+export function isNewTab(url: string): boolean {
+  return url === "";
 }
 
 export function createTab(url?: string): Promise<Tab> {
@@ -77,8 +91,8 @@ export function reopenClosedTab(): Promise<Tab | null> {
   return invoke("reopen_closed_tab");
 }
 
-export function toggleSidebar(): Promise<boolean> {
-  return invoke("toggle_sidebar");
+export function toggleTabStrip(): Promise<boolean> {
+  return invoke("toggle_tab_strip");
 }
 
 export function findInPage(query: string, backwards: boolean): Promise<void> {

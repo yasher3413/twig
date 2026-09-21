@@ -69,7 +69,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
                 .build(app)?,
         )
         .item(&MenuItemBuilder::with_id("find-in-page", "Find in Page").accelerator("CmdOrCtrl+F").build(app)?)
-        .item(&MenuItemBuilder::with_id("toggle-sidebar", "Toggle Sidebar").accelerator("CmdOrCtrl+B").build(app)?)
+        .item(&MenuItemBuilder::with_id("toggle-tab-strip", "Toggle Tab Strip").accelerator("CmdOrCtrl+B").build(app)?)
         .separator()
         .item(&MenuItemBuilder::with_id("settings", "Settings…").accelerator("CmdOrCtrl+,").build(app)?)
         .separator();
@@ -142,7 +142,7 @@ pub fn run() {
             tabs::close_group,
             tabs::rename_group,
             tabs::reopen_closed_tab,
-            tabs::toggle_sidebar,
+            tabs::toggle_tab_strip,
             tabs::find_in_page,
             tabs::open_private_window,
             tabs::go_back,

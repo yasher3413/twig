@@ -13,7 +13,7 @@ import {
   reorderTab,
   setSplit,
   switchGroup,
-  toggleSidebar as toggleSidebarCommand,
+  toggleTabStrip as toggleTabStripCommand,
   type Group,
   type Tab,
   type TabsChangedPayload,
@@ -26,7 +26,7 @@ interface TabStore {
   splitId: string | null;
   groups: Group[];
   activeGroupId: string;
-  sidebarVisible: boolean;
+  tabStripVisible: boolean;
   isPrivate: boolean;
   ready: boolean;
   init: () => Promise<void>;
@@ -41,7 +41,7 @@ interface TabStore {
   closeSpace: (id: string) => Promise<void>;
   renameSpace: (id: string, name: string) => Promise<void>;
   reopenClosed: () => Promise<void>;
-  toggleSidebar: () => Promise<void>;
+  toggleTabStrip: () => Promise<void>;
 }
 
 export const useTabStore = create<TabStore>((set, get) => {
@@ -52,7 +52,7 @@ export const useTabStore = create<TabStore>((set, get) => {
       splitId: payload.splitId,
       groups: payload.groups,
       activeGroupId: payload.activeGroupId,
-      sidebarVisible: payload.sidebarVisible,
+      tabStripVisible: payload.tabStripVisible,
       isPrivate: payload.isPrivate,
     });
   }
@@ -67,7 +67,7 @@ export const useTabStore = create<TabStore>((set, get) => {
     splitId: null,
     groups: [],
     activeGroupId: "",
-    sidebarVisible: true,
+    tabStripVisible: true,
     isPrivate: false,
     ready: false,
     async init() {
@@ -110,8 +110,8 @@ export const useTabStore = create<TabStore>((set, get) => {
       const tab = await reopenClosedTab();
       if (tab && !get().isPrivate) await recordVisit(tab.url, tab.title);
     },
-    async toggleSidebar() {
-      await toggleSidebarCommand();
+    async toggleTabStrip() {
+      await toggleTabStripCommand();
     },
   };
 });
