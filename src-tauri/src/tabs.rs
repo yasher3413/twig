@@ -581,14 +581,36 @@ fn spawn_webview<R: Runtime>(
     // Once a page settles, lift its text out and hand it to the chrome to
     // index. Private windows are skipped: the point of them is that
     // nothing is written down.
-    if !incognito {
-        let indexer = app.clone();
+    {
+        let hooked = app.clone();
+        let index_pages = !incognito;
         builder = builder.on_page_load(move |webview, payload| {
             if payload.event() != PageLoadEvent::Finished {
                 return;
             }
             let url = payload.url().to_string();
-            let handle = indexer.clone();
+
+            // Zoom is remembered per site, so a page that needs it bigger
+            // stays bigger every time you come back.
+            if let Some(host) = host_of(&url) {
+                let level = hooked
+                    .state::<TabManager>()
+                    .1
+                    .lock()
+                    .unwrap()
+                    .get(&host)
+                    .copied();
+                if let Some(level) = level {
+                    if (level - 1.0).abs() > f64::EPSILON {
+                        let _ = webview.set_zoom(level);
+                    }
+                }
+            }
+
+            if !index_pages {
+                return;
+            }
+            let handle = hooked.clone();
             let _ = webview.eval_with_callback(
                 "JSON.stringify({t: document.title || '', b: (document.body ? document.body.innerText : '').slice(0, 40000)})",
                 move |raw| {
@@ -1619,9 +1641,32 @@ pub fn open_private_window<R: Runtime>(app: AppHandle<R>, manager: State<'_, Tab
     Ok(())
 }
 
-/// Steps a tab's zoom. `direction` is 1 to zoom in, -1 out, 0 to reset.
-/// Zoom lives on the webview rather than in `TabEntry`, so it resets when
-/// a tab hibernates - matching what the page itself does on reload.
+/// The site a URL belongs to, which is the granularity zoom is remembered
+/// at. www is dropped so one setting covers both spellings.
+fn host_of(url: &str) -> Option<String> {
+    url::Url::parse(url)
+        .ok()?
+        .host_str()
+        .map(|h| h.trim_start_matches("www.").to_string())
+}
+
+fn zoom_path<R: Runtime>(app: &AppHandle<R>) -> Option<std::path::PathBuf> {
+    let dir = app.path().app_data_dir().ok()?;
+    let _ = std::fs::create_dir_all(&dir);
+    Some(dir.join("zoom.json"))
+}
+
+/// Loads remembered per-site zoom. Call once at startup.
+pub fn load_zoom_levels<R: Runtime>(app: &AppHandle<R>) {
+    let Some(path) = zoom_path(app) else { return };
+    let Ok(raw) = std::fs::read_to_string(path) else { return };
+    let Ok(map) = serde_json::from_str::<HashMap<String, f64>>(&raw) else { return };
+    *app.state::<TabManager>().1.lock().unwrap() = map;
+}
+
+/// Steps zoom for the site a tab is on. `direction` is 1 to zoom in, -1
+/// out, 0 to reset. Stored per host rather than per tab, so it survives
+/// hibernation, new tabs, and restarts alike.
 #[tauri::command]
 pub fn zoom_tab<R: Runtime>(
     app: AppHandle<R>,
@@ -1629,8 +1674,19 @@ pub fn zoom_tab<R: Runtime>(
     id: String,
     direction: i32,
 ) -> Result<f64, String> {
+    let url = manager
+        .0
+        .lock()
+        .unwrap()
+        .values()
+        .find_map(|inner| inner.tabs.iter().find(|t| t.id == id).map(|t| t.url.clone()))
+        .unwrap_or_default();
+    let Some(host) = host_of(&url) else {
+        return Ok(1.0);
+    };
+
     let mut levels = manager.1.lock().unwrap();
-    let current = *levels.get(&id).unwrap_or(&1.0);
+    let current = *levels.get(&host).unwrap_or(&1.0);
     let next = match direction {
         0 => 1.0,
         d if d > 0 => (current + 0.1).min(3.0),
@@ -1641,7 +1697,17 @@ pub fn zoom_tab<R: Runtime>(
     if let Some(webview) = app.get_webview(&tab_label(&id)) {
         webview.set_zoom(rounded).map_err(|e| e.to_string())?;
     }
-    levels.insert(id, rounded);
+    if (rounded - 1.0).abs() < f64::EPSILON {
+        levels.remove(&host);
+    } else {
+        levels.insert(host, rounded);
+    }
+
+    if let Some(path) = zoom_path(&app) {
+        if let Ok(json) = serde_json::to_string(&*levels) {
+            let _ = std::fs::write(path, json);
+        }
+    }
     Ok(rounded)
 }
 

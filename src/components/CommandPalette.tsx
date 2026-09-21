@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { useTabStore } from "../store/tabs";
 import { isInternalUrl, openPrivateWindow, setOverlayActive } from "../lib/tabs";
 import {
@@ -29,7 +29,8 @@ function looksLikeUrl(query: string): boolean {
 }
 
 export function CommandPalette() {
-  const { tabs, activeId, newTab, switchTo, close, navigate } = useTabStore();
+  const { tabs, activeId, newTab, switchTo, close, navigate, toggleTabStrip, reopenClosed } =
+    useTabStore();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
@@ -146,9 +147,46 @@ export function CommandPalette() {
       });
     }
 
+    // The palette should be able to do the things the menus can, not just
+    // navigate to places.
     const commands: ResultItem[] = [
-      { key: "cmd-new-tab", label: "New Tab", run: () => newTab() },
-      { key: "cmd-new-private-window", label: "New Private Window", run: () => openPrivateWindow() },
+      { key: "cmd-new-tab", label: "New Tab", sublabel: "⌘T", run: () => newTab() },
+      {
+        key: "cmd-new-private-window",
+        label: "New Private Window",
+        sublabel: "⇧⌘N",
+        run: () => openPrivateWindow(),
+      },
+      {
+        key: "cmd-bookmarks",
+        label: "Show Bookmarks",
+        sublabel: "⇧⌘O",
+        run: () => emit("menu-action", "show-bookmarks"),
+      },
+      {
+        key: "cmd-history",
+        label: "Show History",
+        sublabel: "⌘Y",
+        run: () => emit("menu-action", "show-history"),
+      },
+      {
+        key: "cmd-settings",
+        label: "Settings",
+        sublabel: "⌘,",
+        run: () => emit("menu-action", "settings"),
+      },
+      {
+        key: "cmd-toggle-strip",
+        label: "Toggle Tab Strip",
+        sublabel: "⌘B",
+        run: () => toggleTabStrip(),
+      },
+      {
+        key: "cmd-reopen",
+        label: "Reopen Closed Tab",
+        sublabel: "⇧⌘T",
+        run: () => reopenClosed(),
+      },
     ];
     if (activeId) {
       commands.push({
@@ -181,7 +219,7 @@ export function CommandPalette() {
 
     return items;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, tabs, activeId, activeTab, activeBookmarked, historyMatches, bookmarkMatches, pageMatches, switchTo, newTab, close, navigate]);
+  }, [query, tabs, activeId, activeTab, activeBookmarked, historyMatches, bookmarkMatches, pageMatches, switchTo, newTab, close, navigate, toggleTabStrip, reopenClosed]);
 
   useEffect(() => {
     setSelected(0);
