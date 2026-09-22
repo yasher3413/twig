@@ -21,9 +21,18 @@ export type IconName =
   | "incognito"
   | "star"
   | "star-filled"
-  | "history";
+  | "history"
+  | "fork";
 
 const PATHS: Record<IconName, ReactNode> = {
+  fork: (
+    <>
+      <circle cx="4" cy="3" r="1.5" />
+      <circle cx="12" cy="3" r="1.5" />
+      <circle cx="4" cy="13" r="1.5" />
+      <path d="M4 4.5v7M12 4.5C12 9 4 6 4 10" />
+    </>
+  ),
   back: <path d="M10 3.5 5.5 8l4.5 4.5" />,
   forward: <path d="M6 3.5 10.5 8 6 12.5" />,
   reload: (

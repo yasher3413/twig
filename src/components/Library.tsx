@@ -59,7 +59,7 @@ export function Library() {
   });
 
   useEffect(() => {
-    setOverlayActive(open);
+    setOverlayActive(open, "library");
   }, [open]);
 
   useEffect(() => {

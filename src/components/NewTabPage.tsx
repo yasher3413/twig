@@ -4,6 +4,7 @@ import { historyCount, topSites, searchBookmarks, type Bookmark, type HistoryEnt
 import { Icon } from "./Icon";
 import { SiteMark, hostOf } from "./SiteMark";
 import "./NewTabPage.css";
+import { openCheckpoints } from "../lib/checkpoints";
 
 // Drawn by the chrome webview rather than loaded into the tab's own
 // webview. That's what lets it read local history/bookmarks at all - a
@@ -69,6 +70,9 @@ export function NewTabPage() {
           </p>
         ) : (
           <>
+            <button className="newtab-checkpoints" onClick={() => openCheckpoints()}>
+              <Icon name="history" size={15} /> Pick up from a checkpoint <span>⇧⌘H</span>
+            </button>
             {sites.length > 0 && (
               <section className="newtab-section">
                 <h2>Most visited</h2>

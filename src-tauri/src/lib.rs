@@ -107,6 +107,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let file_menu = SubmenuBuilder::new(app, "File")
         .item(&action(app, "new-tab", "New Tab", "CmdOrCtrl+T")?)
         .item(&action(app, "new-private-window", "New Private Window", "CmdOrCtrl+Shift+N")?)
+        .item(&action(app, "save-checkpoint", "Save Checkpoint…", "CmdOrCtrl+Shift+S")?)
         .separator()
         .item(&action(app, "close-tab", "Close Tab", "CmdOrCtrl+W")?)
         .item(&action(app, "reopen-closed-tab", "Reopen Closed Tab", "CmdOrCtrl+Shift+T")?)
@@ -150,6 +151,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .item(&action(app, "show-bookmarks", "Show Bookmarks", "CmdOrCtrl+Shift+O")?)
         .separator()
         .item(&action(app, "show-history", "Show History", "CmdOrCtrl+Y")?)
+        .item(&action(app, "show-checkpoints", "Checkpoints…", "CmdOrCtrl+Shift+H")?)
         .build()?;
 
     let mut tab_menu = SubmenuBuilder::new(app, "Tab")
@@ -265,6 +267,10 @@ pub fn run() {
             tabs::memory_stats,
             tabs::follow_link,
             tabs::toggle_reader,
+            tabs::checkpoints::list_checkpoints,
+            tabs::checkpoints::save_checkpoint,
+            tabs::checkpoints::restore_checkpoint,
+            tabs::checkpoints::delete_checkpoint,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -14,6 +14,7 @@ import {
   type PageMatch,
 } from "../lib/db";
 import "./CommandPalette.css";
+import { openCheckpoints } from "../lib/checkpoints";
 
 interface ResultItem {
   key: string;
@@ -29,7 +30,7 @@ function looksLikeUrl(query: string): boolean {
 }
 
 export function CommandPalette() {
-  const { tabs, activeId, newTab, switchTo, close, navigate, toggleTabStrip, reopenClosed } =
+  const { tabs, activeId, isPrivate, newTab, switchTo, close, navigate, toggleTabStrip, reopenClosed } =
     useTabStore();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -57,7 +58,7 @@ export function CommandPalette() {
   }, []);
 
   useEffect(() => {
-    setOverlayActive(open);
+    setOverlayActive(open, "palette");
     if (open) {
       setQuery("");
       setSelected(0);
@@ -188,6 +189,12 @@ export function CommandPalette() {
         run: () => reopenClosed(),
       },
     ];
+    if (!isPrivate) {
+      commands.push(
+        { key: "cmd-checkpoints", label: "Show Checkpoints", sublabel: "⇧⌘H", run: () => openCheckpoints() },
+        { key: "cmd-save-checkpoint", label: "Save Checkpoint", sublabel: "⇧⌘S", run: () => openCheckpoints(true) },
+      );
+    }
     if (activeId) {
       commands.push({
         key: "cmd-close-tab",
@@ -219,7 +226,7 @@ export function CommandPalette() {
 
     return items;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, tabs, activeId, activeTab, activeBookmarked, historyMatches, bookmarkMatches, pageMatches, switchTo, newTab, close, navigate, toggleTabStrip, reopenClosed]);
+  }, [query, tabs, activeId, activeTab, activeBookmarked, historyMatches, bookmarkMatches, pageMatches, switchTo, newTab, close, navigate, toggleTabStrip, reopenClosed, isPrivate]);
 
   useEffect(() => {
     setSelected(0);

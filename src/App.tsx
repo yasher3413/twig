@@ -8,6 +8,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { NewTabPage } from "./components/NewTabPage";
 import { Library } from "./components/Library";
 import { Downloads } from "./components/Downloads";
+import { Checkpoints } from "./components/Checkpoints";
 import { useTabStore } from "./store/tabs";
 import { useSettingsStore } from "./store/settings";
 import { followLink, goBack, goForward, isNewTab, reloadTab, toggleReader, zoomTab } from "./lib/tabs";
@@ -112,6 +113,7 @@ function App() {
       <FindBar />
       <Library />
       <Downloads />
+      <Checkpoints />
       <CommandPalette />
       <SettingsPanel />
     </>

@@ -70,8 +70,19 @@ export function setContentOffset(offset: number): Promise<void> {
   return invoke("set_content_offset", { offset });
 }
 
-export function setOverlayActive(open: boolean): Promise<void> {
-  return invoke("set_overlay_active", { open });
+const overlayOwners = new Set<string>();
+let overlayUpdate: Promise<void> = Promise.resolve();
+
+export function setOverlayActive(open: boolean, owner: string): Promise<void> {
+  if (open) overlayOwners.add(owner);
+  else overlayOwners.delete(owner);
+  const active = overlayOwners.size > 0;
+  // A closing palette must not reveal native pages over a checkpoint
+  // browser it just opened. Preserve ordering across the native bridge.
+  overlayUpdate = overlayUpdate.catch(() => {}).then(() =>
+    invoke<void>("set_overlay_active", { open: active }),
+  );
+  return overlayUpdate;
 }
 
 export function setSplit(id: string | null): Promise<void> {

@@ -234,3 +234,20 @@
   border-radius: 50%;
   background: var(--border-strong);
 }
+.newtab-checkpoints {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 20px auto;
+  padding: 9px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: default;
+}
+
+.newtab-checkpoints span { margin-left: 8px; color: var(--text-muted); font-size: 11px; }
+.newtab-checkpoints:hover { background: var(--row-hover); }
+.newtab-checkpoints:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

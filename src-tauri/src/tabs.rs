@@ -11,6 +11,8 @@ use tauri::{
     WindowEvent,
 };
 
+pub mod checkpoints;
+
 /// Height, in logical pixels, of the horizontal tab strip. Hidden entirely
 /// when `tab_strip_visible` is off, which is what Cmd+B toggles.
 pub const TAB_STRIP_HEIGHT: f64 = 38.0;
@@ -425,6 +427,7 @@ struct Group {
     name: String,
     active_id: Option<String>,
     split_id: Option<String>,
+    checkpoint_parent_id: Option<String>,
 }
 
 /// Per-window tab state. Every window (the main one, and any private ones)
@@ -442,6 +445,7 @@ struct Inner {
     /// position moves - the size is left alone so the page doesn't
     /// re-layout, it just slides and clips at the bottom.
     content_offset: f64,
+    overlay_active: bool,
     /// Private windows use a non-persistent webview data store (no cookies
     /// or site data written to disk) and skip history/bookmark recording
     /// on the frontend side.
@@ -455,6 +459,7 @@ impl Default for Inner {
             name: "Space 1".to_string(),
             active_id: None,
             split_id: None,
+            checkpoint_parent_id: None,
         };
         Inner {
             tabs: Vec::new(),
@@ -464,6 +469,7 @@ impl Default for Inner {
             tab_strip_visible: true,
             closed_stack: Vec::new(),
             content_offset: 0.0,
+            overlay_active: false,
             is_private: false,
         }
     }
@@ -795,6 +801,12 @@ fn place<R: Runtime>(app: &AppHandle<R>, id: &str, bounds: (LogicalPosition<f64>
 /// Anything being replaced needs to be hidden by the caller first - this
 /// only handles what *should* now be visible.
 fn sync_visible_webviews<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, inner: &Inner) {
+    if inner.overlay_active {
+        for id in visible_ids(inner) {
+            let _ = hide_tab(app, &tab_label(&id));
+        }
+        return;
+    }
     let group = inner.active_group();
     match &group.split_id {
         Some(split_id) => {
@@ -818,6 +830,9 @@ fn sync_visible_webviews<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, inn
 }
 
 fn focus_active<R: Runtime>(app: &AppHandle<R>, inner: &Inner) {
+    if inner.overlay_active {
+        return;
+    }
     if let Some(id) = &inner.active_group().active_id {
         if let Some(webview) = app.get_webview(&tab_label(id)) {
             let _ = webview.set_focus();
@@ -1451,9 +1466,15 @@ pub fn set_overlay_active<R: Runtime>(
 ) -> Result<(), String> {
     let mut managers = manager.0.lock().unwrap();
     let inner = inner_for(&mut managers, &window);
+    inner.overlay_active = open;
     if open {
         for id in visible_ids(inner) {
             hide_tab(&app, &tab_label(&id)).map_err(|e| e.to_string())?;
+        }
+        // Native menu shortcuts can arrive while a page owns keyboard
+        // focus. DOM focus alone cannot move it into the chrome webview.
+        if let Some(chrome) = app.get_webview(window.label()) {
+            chrome.set_focus().map_err(|e| e.to_string())?;
         }
         Ok(())
     } else {
@@ -1529,6 +1550,7 @@ pub fn create_group<R: Runtime>(
         name: name.clone(),
         active_id: None,
         split_id: None,
+        checkpoint_parent_id: None,
     });
 
     switch_to_group(&app, &window, inner, &id)?;
@@ -2010,6 +2032,8 @@ struct PersistedGroup {
     name: String,
     active_id: Option<String>,
     split_id: Option<String>,
+    #[serde(default)]
+    checkpoint_parent_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -2051,6 +2075,7 @@ fn save_session<R: Runtime>(app: &AppHandle<R>, inner: &Inner) {
                 name: g.name.clone(),
                 active_id: g.active_id.clone(),
                 split_id: g.split_id.clone(),
+                checkpoint_parent_id: g.checkpoint_parent_id.clone(),
             })
             .collect(),
         active_group_id: inner.active_group_id.clone(),
@@ -2113,6 +2138,7 @@ pub fn restore_session<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) {
             name: g.name,
             active_id: g.active_id,
             split_id: g.split_id,
+            checkpoint_parent_id: g.checkpoint_parent_id,
         })
         .collect();
     if inner.groups.is_empty() {
@@ -2121,6 +2147,7 @@ pub fn restore_session<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) {
             name: "Space 1".to_string(),
             active_id: None,
             split_id: None,
+            checkpoint_parent_id: None,
         });
     }
     inner.active_group_id = if inner.groups.iter().any(|g| g.id == session.active_group_id) {

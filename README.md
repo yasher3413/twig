@@ -38,6 +38,19 @@ cost you anything.
 - Closed tabs are archived and searchable, not just `⇧⌘T`-able
 - Live memory readout: what's in use, what's asleep, what that saved
 
+**Checkpoints**
+- Save a named checkpoint of the current space (`⇧⌘S`), with an optional note
+- Browse a searchable timeline (`⇧⌘H`), previewing the saved tab order and split view
+- Resume a checkpoint in a separate space, or give a fork a new name to explore another direction
+- Reading positions are captured where possible; only the active tab and its split partner wake on restore
+- Checkpoints stay unchanged as you browse, and later saves remember their parent checkpoint
+- Saved locally, excluded from private windows, and individually deletable without closing open tabs
+
+Checkpoints preserve addresses and browsing layout, not old versions of
+websites, form contents, or sign-in state. Reading position restoration is
+best-effort on pages that load or rearrange content dynamically. Resuming
+always creates a new space, keeping your current work available.
+
 **Finding things**
 - `⌘K` palette across open tabs, bookmarks, history, and commands
 - **Full-text search of pages you've read.** Page text is indexed
@@ -90,6 +103,8 @@ a narrower thing than an extension store.
 | `⌘D` | Bookmark this page |
 | `⇧⌘O` / `⌘Y` | Bookmarks / history |
 | `⇧⌘N` | New private window |
+| `⇧⌘S` | Save current space as a checkpoint |
+| `⇧⌘H` | Browse checkpoints |
 | `⌘,` | Settings |
 
 ## Stack
@@ -126,6 +141,15 @@ npm run tauri dev
 
 ```sh
 npm run tauri build
+```
+
+### Checks
+
+```sh
+npm test
+npm run build
+cargo test --manifest-path src-tauri/Cargo.toml --lib
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets
 ```
 
 ## Status

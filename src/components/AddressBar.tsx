@@ -16,6 +16,7 @@ import { SEARCH_ENGINES } from "../store/settings";
 import { SpaceSwitcher } from "./SpaceSwitcher";
 import { Icon } from "./Icon";
 import "./AddressBar.css";
+import { openCheckpoints } from "../lib/checkpoints";
 
 interface Suggestion {
   key: string;
@@ -389,6 +390,12 @@ export function AddressBar() {
       </div>
 
       <SpaceSwitcher />
+
+      {!isPrivate && (
+        <button className="nav-button" title="Checkpoints (⇧⌘H)" aria-label="Open checkpoints" onClick={() => openCheckpoints()}>
+          <Icon name="history" />
+        </button>
+      )}
 
       <button className="nav-button" title="Settings (⌘,)" onClick={togglePanel}>
         <Icon name="settings" />

@@ -48,7 +48,7 @@ export function SettingsPanel() {
   }, [togglePanel]);
 
   useEffect(() => {
-    setOverlayActive(panelOpen);
+    setOverlayActive(panelOpen, "settings");
     if (!panelOpen) return;
     setCleared(null);
     historyCount().then(setPages);

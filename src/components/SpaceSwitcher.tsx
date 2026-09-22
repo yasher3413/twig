@@ -22,7 +22,7 @@ export function SpaceSwitcher() {
   // so no z-index here can draw over them - the page has to actually step
   // aside while the menu is open. Same mechanism the command palette uses.
   useEffect(() => {
-    setOverlayActive(open);
+    setOverlayActive(open, "spaces");
   }, [open]);
 
   useEffect(() => {
