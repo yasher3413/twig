@@ -108,6 +108,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .item(&action(app, "new-tab", "New Tab", "CmdOrCtrl+T")?)
         .item(&action(app, "new-private-window", "New Private Window", "CmdOrCtrl+Shift+N")?)
         .item(&action(app, "save-checkpoint", "Save Checkpoint…", "CmdOrCtrl+Shift+S")?)
+        .item(&action(app, "package-current-space", "Package Current Space…", "CmdOrCtrl+Alt+P")?)
         .separator()
         .item(&action(app, "close-tab", "Close Tab", "CmdOrCtrl+W")?)
         .item(&action(app, "reopen-closed-tab", "Reopen Closed Tab", "CmdOrCtrl+Shift+T")?)
@@ -152,6 +153,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .separator()
         .item(&action(app, "show-history", "Show History", "CmdOrCtrl+Y")?)
         .item(&action(app, "show-checkpoints", "Checkpoints…", "CmdOrCtrl+Shift+H")?)
+        .item(&action(app, "show-research-packages", "Research Packages…", "CmdOrCtrl+Shift+P")?)
         .build()?;
 
     let mut tab_menu = SubmenuBuilder::new(app, "Tab")
@@ -271,6 +273,13 @@ pub fn run() {
             tabs::checkpoints::save_checkpoint,
             tabs::checkpoints::restore_checkpoint,
             tabs::checkpoints::delete_checkpoint,
+            tabs::research::list_research_packages,
+            tabs::research::save_research_package,
+            tabs::research::delete_research_package,
+            tabs::research::parse_research_package,
+            tabs::research::export_research_package,
+            tabs::research::open_research_package,
+            tabs::research::capture_research_excerpt,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

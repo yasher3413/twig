@@ -9,6 +9,7 @@ import {
 import { Icon } from "./Icon";
 import { hostOf } from "./SiteMark";
 import "./Checkpoints.css";
+import { openResearchPackages } from "../lib/research";
 
 function dateLabel(timestamp: number): string {
   return new Date(timestamp).toLocaleString(undefined, {
@@ -262,6 +263,7 @@ function CheckpointBrowser({ saveRequested, onClose }: {
               </ol>
 
               <div className="checkpoint-resume">
+                <button className="checkpoint-button" disabled={busy} onClick={() => { void openResearchPackages(selected); onClose(); }}><Icon name="package" size={14} /> Package this research</button>
                 <p>Resume in a separate space. Your current tabs stay where they are.</p>
                 {forking ? (
                   <form onSubmit={(e) => { e.preventDefault(); if (forkName.trim()) resume(forkName.trim()); }}>

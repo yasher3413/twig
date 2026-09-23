@@ -17,6 +17,7 @@ import { SpaceSwitcher } from "./SpaceSwitcher";
 import { Icon } from "./Icon";
 import "./AddressBar.css";
 import { openCheckpoints } from "../lib/checkpoints";
+import { openResearchPackages } from "../lib/research";
 
 interface Suggestion {
   key: string;
@@ -400,6 +401,7 @@ export function AddressBar() {
       <button className="nav-button" title="Settings (⌘,)" onClick={togglePanel}>
         <Icon name="settings" />
       </button>
+      {!isPrivate && <button className="nav-button" title="Research packages (⇧⌘P)" aria-label="Open research packages" onClick={() => void openResearchPackages()}><Icon name="package" /></button>}
     </div>
   );
 }

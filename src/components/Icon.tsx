@@ -22,9 +22,16 @@ export type IconName =
   | "star"
   | "star-filled"
   | "history"
-  | "fork";
+  | "fork"
+  | "package";
 
 const PATHS: Record<IconName, ReactNode> = {
+  package: (
+    <>
+      <path d="M3 4.5 8 2l5 2.5v7L8 14l-5-2.5Z" />
+      <path d="m3 4.5 5 2.7 5-2.7M8 7.2V14M5.5 3.25l5 2.65" />
+    </>
+  ),
   fork: (
     <>
       <circle cx="4" cy="3" r="1.5" />

@@ -15,6 +15,7 @@ import {
 } from "../lib/db";
 import "./CommandPalette.css";
 import { openCheckpoints } from "../lib/checkpoints";
+import { openResearchPackages } from "../lib/research";
 
 interface ResultItem {
   key: string;
@@ -193,6 +194,8 @@ export function CommandPalette() {
       commands.push(
         { key: "cmd-checkpoints", label: "Show Checkpoints", sublabel: "⇧⌘H", run: () => openCheckpoints() },
         { key: "cmd-save-checkpoint", label: "Save Checkpoint", sublabel: "⇧⌘S", run: () => openCheckpoints(true) },
+        { key: "cmd-research", label: "Show Research Packages", sublabel: "⇧⌘P", run: () => { void openResearchPackages(); } },
+        { key: "cmd-package-space", label: "Package Current Space", sublabel: "⌥⌘P", run: () => { void openResearchPackages("current"); } },
       );
     }
     if (activeId) {

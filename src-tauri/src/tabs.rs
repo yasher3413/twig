@@ -12,6 +12,7 @@ use tauri::{
 };
 
 pub mod checkpoints;
+pub mod research;
 
 /// Height, in logical pixels, of the horizontal tab strip. Hidden entirely
 /// when `tab_strip_visible` is off, which is what Cmd+B toggles.

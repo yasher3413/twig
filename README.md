@@ -51,6 +51,26 @@ websites, form contents, or sign-in state. Reading position restoration is
 best-effort on pages that load or rearrange content dynamically. Resuming
 always creates a new space, keeping your current work available.
 
+**Research packages**
+
+- Package the current space (`⌥⌘P`) or choose “Package this research” on a checkpoint
+- Select and reorder sources, add page notes and excerpts, and preview exactly what will be shared
+- A passage selected on the active web page is included when packaging that space; selections inside editable controls are excluded
+- Save packages in a local library, including their notes and excerpts
+- Export a portable `.twig` file, Markdown, or a standalone HTML document to Downloads without overwriting existing files
+- Import a `.twig` file from Research Packages (`⇧⌘P`), preview it, then open its pages in a separate space
+
+Packages contain only selected HTTP(S) links, titles, dates, notes, excerpts,
+and optional checkpoint name/date. Full addresses (including query parameters)
+are included, so review them before sharing. Cookies, form contents, local-file
+tabs, and private windows are excluded. Imported files cannot run scripts;
+only explicitly opening a package loads its first page. The remaining tabs
+stay asleep until used. Exported HTML and Markdown can be read without Twig.
+
+The [versioned package format](docs/research-packages.md) is documented for
+other tools. There is no upload or sharing service: you choose how to send
+the exported file.
+
 **Finding things**
 - `⌘K` palette across open tabs, bookmarks, history, and commands
 - **Full-text search of pages you've read.** Page text is indexed
@@ -105,6 +125,8 @@ a narrower thing than an extension store.
 | `⇧⌘N` | New private window |
 | `⇧⌘S` | Save current space as a checkpoint |
 | `⇧⌘H` | Browse checkpoints |
+| `⌥⌘P` | Package the current space |
+| `⇧⌘P` | Research package library and import |
 | `⌘,` | Settings |
 
 ## Stack
