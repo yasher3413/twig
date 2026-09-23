@@ -1,5 +1,7 @@
 import Database from "@tauri-apps/plugin-sql";
 import { isInternalUrl } from "./tabs";
+import { clearRecall, forgetRecallHistory, indexRecall, searchRecall } from "./recall-db";
+import type { RecallCapture } from "./recall-db";
 
 // Connection is established lazily on first query; must match the db_url
 // passed to add_migrations in src-tauri/src/lib.rs.
@@ -109,15 +111,9 @@ export interface PageMatch {
   snippet: string;
 }
 
-/** Records a page's text in the local full-text index, replacing whatever
- *  was there for that URL. */
-export async function indexPage(url: string, title: string, body: string): Promise<void> {
-  if (!url || isInternalUrl(url)) return;
-  await db.execute("DELETE FROM page_text WHERE url = $1", [url]);
-  await db.execute(
-    "INSERT INTO page_text (url, title, body, captured_at) VALUES ($1, $2, $3, $4)",
-    [url, title, body, Date.now()],
-  );
+/** Keeps an immutable reading copy together with its original context. */
+export function indexPage(capture: RecallCapture): Promise<void> {
+  return indexRecall(capture);
 }
 
 /** Searches the text of pages you've actually read, not just their titles.
@@ -126,41 +122,27 @@ export async function indexPage(url: string, title: string, body: string): Promi
 export async function searchPages(query: string, limit = 8): Promise<PageMatch[]> {
   const q = query.trim();
   if (!q) return [];
-  // Quoted so FTS5 treats user input as terms rather than operators; a
-  // stray quote or AND would otherwise be a syntax error.
-  const match = q
-    .split(/\s+/)
-    .map((term) => `"${term.replace(/"/g, '""')}"`)
-    .join(" ");
-  try {
-    const rows = await db.select<{ url: string; title: string; snippet: string }[]>(
-      `SELECT url, title, snippet(page_text, 2, '[[', ']]', '…', 12) as snippet
-       FROM page_text WHERE page_text MATCH $1
-       ORDER BY rank
-       LIMIT $2`,
-      [match, limit],
-    );
-    return rows;
-  } catch {
-    // A malformed query shouldn't take the palette down with it.
-    return [];
+  const rows = await searchRecall({ query: q, limit: 2000 });
+  const pages = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    const previous = pages.get(row.url);
+    if (!previous || previous.capturedAt < row.capturedAt) pages.set(row.url, row);
   }
+  return Array.from(pages.values()).slice(0, Math.max(0, limit));
 }
 
-export async function clearPageIndex(): Promise<void> {
-  await db.execute("DELETE FROM page_text");
+export function clearPageIndex(): Promise<void> {
+  return clearRecall();
 }
 
 /** Forgets every visit to a URL, and its indexed text with it. */
-export async function deleteHistoryUrl(url: string): Promise<void> {
-  await db.execute("DELETE FROM history WHERE url = $1", [url]);
-  await db.execute("DELETE FROM page_text WHERE url = $1", [url]);
+export function deleteHistoryUrl(url: string): Promise<void> {
+  return forgetRecallHistory(url);
 }
 
 /** Wipes local browsing history. Bookmarks are kept - they're explicit. */
-export async function clearHistory(): Promise<void> {
-  await db.execute("DELETE FROM history");
-  await clearPageIndex();
+export function clearHistory(): Promise<void> {
+  return forgetRecallHistory();
 }
 
 export interface ArchivedTab {

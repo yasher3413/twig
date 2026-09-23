@@ -6,6 +6,7 @@ import { SiteMark, hostOf } from "./SiteMark";
 import "./NewTabPage.css";
 import { openCheckpoints } from "../lib/checkpoints";
 import { openResearchPackages } from "../lib/research";
+import { openRecall } from "../lib/recall";
 
 // Drawn by the chrome webview rather than loaded into the tab's own
 // webview. That's what lets it read local history/bookmarks at all - a
@@ -71,6 +72,7 @@ export function NewTabPage() {
           </p>
         ) : (
           <>
+            <button className="newtab-checkpoints" onClick={() => openRecall()}><Icon name="recall" size={15} /> Find something you read <span>⇧⌘F</span></button>
             <button className="newtab-checkpoints" onClick={() => openCheckpoints()}>
               <Icon name="history" size={15} /> Pick up from a checkpoint <span>⇧⌘H</span>
             </button>

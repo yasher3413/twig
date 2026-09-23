@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
+    "test:recall-browser": "node tests/recall-browser.mjs",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",

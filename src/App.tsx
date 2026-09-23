@@ -10,6 +10,8 @@ import { Library } from "./components/Library";
 import { Downloads } from "./components/Downloads";
 import { Checkpoints } from "./components/Checkpoints";
 import { ResearchPackages } from "./components/ResearchPackages";
+import { Recall } from "./components/Recall";
+import type { RecallCapture } from "./lib/recall-db";
 import { useTabStore } from "./store/tabs";
 import { useSettingsStore } from "./store/settings";
 import { followLink, goBack, goForward, isNewTab, reloadTab, toggleReader, zoomTab } from "./lib/tabs";
@@ -83,11 +85,13 @@ function App() {
 
     // Rust lifts text out of each page once it settles; the index lives
     // here because the database is only reachable from the chrome.
-    const unlistenCapture = listen<{ url: string; title: string; body: string }>(
+    const unlistenCapture = listen<RecallCapture>(
       "page-captured",
       (event) => {
         if (useTabStore.getState().isPrivate) return;
-        indexPage(event.payload.url, event.payload.title, event.payload.body).catch(() => {});
+        indexPage(event.payload).catch((cause) => {
+          window.dispatchEvent(new CustomEvent("twig:recall-index-error", { detail: String(cause) }));
+        });
       },
     );
 
@@ -116,6 +120,7 @@ function App() {
       <Downloads />
       <Checkpoints />
       <ResearchPackages />
+      <Recall />
       <CommandPalette />
       <SettingsPanel />
     </>

@@ -38,7 +38,7 @@ function whenever(ms: number): string {
 // of pages worth getting back to - so they share one surface rather than
 // three panels that would have been near-identical.
 export function Library() {
-  const { newTab } = useTabStore();
+  const { newTab, isPrivate } = useTabStore();
   const [open, setOpen] = useState(false);
   const [shelf, setShelf] = useState<Shelf>("bookmarks");
   const [query, setQuery] = useState("");
@@ -47,6 +47,7 @@ export function Library() {
   useEffect(() => {
     const unlisten = listen<string>("menu-action", (event) => {
       if (event.payload === "show-bookmarks" || event.payload === "show-history") {
+        if (isPrivate && event.payload === "show-history") return;
         const next: Shelf = event.payload === "show-bookmarks" ? "bookmarks" : "history";
         setOpen((was) => !(was && shelf === next));
         setShelf(next);
@@ -72,6 +73,7 @@ export function Library() {
   }, [open]);
 
   const load = useCallback(async () => {
+    if (isPrivate && shelf === "history") { setRows([]); return; }
     if (shelf === "bookmarks") {
       const marks: Bookmark[] = await searchBookmarks(query.trim(), 300);
       setRows(
@@ -102,7 +104,7 @@ export function Library() {
         })),
       );
     }
-  }, [shelf, query]);
+  }, [shelf, query, isPrivate]);
 
   useEffect(() => {
     if (open) load();
@@ -111,6 +113,7 @@ export function Library() {
   if (!open) return null;
 
   async function forget(url: string) {
+    if (isPrivate && shelf === "history") return;
     if (shelf === "bookmarks") await removeBookmark(url);
     else if (shelf === "archive") await deleteArchiveUrl(url);
     else await deleteHistoryUrl(url);
@@ -130,6 +133,8 @@ export function Library() {
             </button>
             <button
               className={shelf === "history" ? "segment selected" : "segment"}
+              disabled={isPrivate}
+              title={isPrivate ? "Manage history in a regular window" : undefined}
               onClick={() => setShelf("history")}
             >
               History

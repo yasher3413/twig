@@ -63,6 +63,12 @@ fn migrations() -> Vec<Migration> {
             CREATE INDEX idx_archive_closed_at ON archive(closed_at);",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 5,
+            description: "recall captures",
+            sql: include_str!("../migrations/005_recall.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -152,6 +158,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .item(&action(app, "show-bookmarks", "Show Bookmarks", "CmdOrCtrl+Shift+O")?)
         .separator()
         .item(&action(app, "show-history", "Show History", "CmdOrCtrl+Y")?)
+        .item(&action(app, "show-recall", "Recall a Passage…", "CmdOrCtrl+Shift+F")?)
         .item(&action(app, "show-checkpoints", "Checkpoints…", "CmdOrCtrl+Shift+H")?)
         .item(&action(app, "show-research-packages", "Research Packages…", "CmdOrCtrl+Shift+P")?)
         .build()?;
@@ -244,6 +251,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             tabs::create_tab,
+            tabs::recall::open_recalled_page,
             tabs::activate_tab,
             tabs::close_tab,
             tabs::list_tabs,

@@ -16,6 +16,7 @@ import {
 import "./CommandPalette.css";
 import { openCheckpoints } from "../lib/checkpoints";
 import { openResearchPackages } from "../lib/research";
+import { openRecall } from "../lib/recall";
 
 interface ResultItem {
   key: string;
@@ -64,7 +65,7 @@ export function CommandPalette() {
       setQuery("");
       setSelected(0);
       requestAnimationFrame(() => inputRef.current?.focus());
-      if (activeTab && !isInternalUrl(activeTab.url)) {
+      if (!isPrivate && activeTab && !isInternalUrl(activeTab.url)) {
         isBookmarked(activeTab.url).then(setActiveBookmarked);
       } else {
         setActiveBookmarked(false);
@@ -75,6 +76,10 @@ export function CommandPalette() {
 
   useEffect(() => {
     if (!open) return;
+    if (isPrivate) {
+      setHistoryMatches([]); setBookmarkMatches([]); setPageMatches([]);
+      return;
+    }
     let cancelled = false;
     searchHistory(query.trim()).then((rows) => {
       if (!cancelled) setHistoryMatches(rows);
@@ -84,11 +89,13 @@ export function CommandPalette() {
     });
     searchPages(query.trim()).then((rows) => {
       if (!cancelled) setPageMatches(rows);
+    }).catch(() => {
+      if (!cancelled) setPageMatches([]);
     });
     return () => {
       cancelled = true;
     };
-  }, [open, query]);
+  }, [open, query, isPrivate]);
 
   async function toggleActiveBookmark() {
     if (!activeTab || isInternalUrl(activeTab.url)) return;
@@ -192,11 +199,13 @@ export function CommandPalette() {
     ];
     if (!isPrivate) {
       commands.push(
+        { key: "cmd-recall", label: "Recall a Passage", sublabel: "⇧⌘F", run: () => openRecall() },
         { key: "cmd-checkpoints", label: "Show Checkpoints", sublabel: "⇧⌘H", run: () => openCheckpoints() },
         { key: "cmd-save-checkpoint", label: "Save Checkpoint", sublabel: "⇧⌘S", run: () => openCheckpoints(true) },
         { key: "cmd-research", label: "Show Research Packages", sublabel: "⇧⌘P", run: () => { void openResearchPackages(); } },
         { key: "cmd-package-space", label: "Package Current Space", sublabel: "⌥⌘P", run: () => { void openResearchPackages("current"); } },
       );
+      if (q) items.push({ key: "recall-query", label: `Search saved passages for “${query.trim()}”`, run: () => openRecall(query.trim()) });
     }
     if (activeId) {
       commands.push({

@@ -9,6 +9,8 @@ import {
   type ThemeMode,
 } from "../store/settings";
 import { Icon } from "./Icon";
+import { useTabStore } from "../store/tabs";
+import { recallCount } from "../lib/recall-db";
 import "./SettingsPanel.css";
 
 const THEME_OPTIONS: { id: ThemeMode; label: string }[] = [
@@ -23,6 +25,7 @@ function formatMb(kb: number): string {
 }
 
 export function SettingsPanel() {
+  const isPrivate = useTabStore((s) => s.isPrivate);
   const {
     panelOpen,
     togglePanel,
@@ -35,6 +38,8 @@ export function SettingsPanel() {
     setSearchEngineId,
   } = useSettingsStore();
   const [pages, setPages] = useState(0);
+  const [copies, setCopies] = useState(0);
+  const [dataError, setDataError] = useState<string | null>(null);
   const [cleared, setCleared] = useState<string | null>(null);
   const [memory, setMemory] = useState<MemoryStats | null>(null);
 
@@ -51,20 +56,28 @@ export function SettingsPanel() {
     setOverlayActive(panelOpen, "settings");
     if (!panelOpen) return;
     setCleared(null);
-    historyCount().then(setPages);
+    setDataError(null);
+    if (!isPrivate) {
+      Promise.all([historyCount(), recallCount()]).then(([history, saved]) => {
+        setPages(history); setCopies(saved);
+      }).catch((cause) => setDataError(String(cause)));
+    }
 
     // Shelling out to ps for every sample, so poll gently.
     memoryStats().then(setMemory);
     const timer = setInterval(() => memoryStats().then(setMemory), 2000);
     return () => clearInterval(timer);
-  }, [panelOpen]);
+  }, [panelOpen, isPrivate]);
 
   if (!panelOpen) return null;
 
   async function onClearHistory() {
-    await clearHistory();
-    setPages(0);
-    setCleared("History cleared.");
+    if (isPrivate) return;
+    try {
+      await clearHistory();
+      setPages(0); setCopies(0); setDataError(null);
+      setCleared("History and saved reading copies cleared.");
+    } catch (cause) { setDataError(`Could not clear all history. ${String(cause)}`); }
   }
 
   async function onClearSiteData() {
@@ -172,10 +185,10 @@ export function SettingsPanel() {
               <span className="settings-label">
                 History
                 <span className="settings-sub">
-                  {pages.toLocaleString()} {pages === 1 ? "page" : "pages"}
+                  {isPrivate ? "Manage history in a regular window" : `${pages.toLocaleString()} pages · ${copies.toLocaleString()} saved copies`}
                 </span>
               </span>
-              <button className="settings-button" onClick={onClearHistory} disabled={pages === 0}>
+              <button className="settings-button" onClick={onClearHistory} disabled={isPrivate || (pages === 0 && copies === 0)}>
                 Clear history
               </button>
             </div>
@@ -189,6 +202,7 @@ export function SettingsPanel() {
               </button>
             </div>
             {cleared && <p className="settings-done">{cleared}</p>}
+            {dataError && <p className="settings-help" role="alert">{dataError}</p>}
           </section>
         </div>
       </div>

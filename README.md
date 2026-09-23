@@ -81,6 +81,22 @@ the exported file.
 - Bookmarks and history in one library (`⇧⌘O` / `⌘Y`)
 - Find-in-page
 
+**Recall**
+
+- `⇧⌘F` searches dated reading copies by remembered words, space, and calendar dates
+- Results show the matching passage, capture time, and the space it came from
+- Read the saved plain text locally, even when the original page changes or disappears
+- See pages captured in the same space and browsing session within 30 minutes
+- Open a fresh live tab with a best-effort jump to the matching passage
+- Delete a single copy, forget every copy of an address, or clear copies with history in Settings
+
+Recall keeps up to 2,000 copies of 40,000 characters each. When full, new
+captures pause and existing copies stay available. Identical captures in
+the same space within 15 minutes are deduplicated. Forms, editable content,
+hidden text, and private windows are excluded from new captures. Existing
+indexed text migrates with its original capture time; its space and session
+remain unknown. See [Recall's behavior and limits](docs/recall.md).
+
 **Reading and handling pages**
 - Reader view (`⌘⇧R`) — strips a page to its article
 - Link hints (`⌘E`) — label every link on screen, type the label to
@@ -127,6 +143,7 @@ a narrower thing than an extension store.
 | `⇧⌘H` | Browse checkpoints |
 | `⌥⌘P` | Package the current space |
 | `⇧⌘P` | Research package library and import |
+| `⇧⌘F` | Recall a passage |
 | `⌘,` | Settings |
 
 ## Stack
@@ -173,6 +190,8 @@ npm run build
 cargo test --manifest-path src-tauri/Cargo.toml --lib
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets
 ```
+
+The test suite uses Node's built-in SQLite module; use Node 22.13+ for tests.
 
 ## Status
 

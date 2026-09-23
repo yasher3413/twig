@@ -18,6 +18,7 @@ import { Icon } from "./Icon";
 import "./AddressBar.css";
 import { openCheckpoints } from "../lib/checkpoints";
 import { openResearchPackages } from "../lib/research";
+import { openRecall } from "../lib/recall";
 
 interface Suggestion {
   key: string;
@@ -391,6 +392,7 @@ export function AddressBar() {
       </div>
 
       <SpaceSwitcher />
+      {!isPrivate && <button className="nav-button" title="Recall a passage (⇧⌘F)" aria-label="Open recall" onClick={() => openRecall()}><Icon name="recall" /></button>}
 
       {!isPrivate && (
         <button className="nav-button" title="Checkpoints (⇧⌘H)" aria-label="Open checkpoints" onClick={() => openCheckpoints()}>

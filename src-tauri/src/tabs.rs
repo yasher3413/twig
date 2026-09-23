@@ -13,6 +13,7 @@ use tauri::{
 
 pub mod checkpoints;
 pub mod research;
+pub mod recall;
 
 /// Height, in logical pixels, of the horizontal tab strip. Hidden entirely
 /// when `tab_strip_visible` is off, which is what Cmd+B toggles.
@@ -373,6 +374,7 @@ fn unique_path(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
 /// Shape the capture script returns: title and body text.
 #[derive(Deserialize)]
 struct CapturedPage {
+    u: String,
     t: String,
     b: String,
 }
@@ -385,6 +387,10 @@ struct IndexedPage {
     url: String,
     title: String,
     body: String,
+    captured_at: u64,
+    space_id: Option<String>,
+    space_name: Option<String>,
+    session_id: Option<String>,
 }
 
 /// A tab's last-known url/title/space, kept around after closing so it can
@@ -642,6 +648,16 @@ fn spawn_webview<R: Runtime>(
     content_offset: f64,
     incognito: bool,
 ) -> tauri::Result<Webview<R>> {
+    spawn_webview_with_script(app, window, id, url, scroll_y, tab_strip_visible, content_offset, incognito, None)
+}
+
+// Keep the existing spawn call sites intact; recall adds only an optional script.
+#[allow(clippy::too_many_arguments)]
+fn spawn_webview_with_script<R: Runtime>(
+    app: &AppHandle<R>, window: &Window<R>, id: &str, url: tauri::Url,
+    scroll_y: f64, tab_strip_visible: bool, content_offset: f64, incognito: bool,
+    recall_script: Option<&str>,
+) -> tauri::Result<Webview<R>> {
     let (position, size) = content_bounds(window, tab_strip_visible, content_offset)?;
     let label = tab_label(id);
     let app_handle = app.clone();
@@ -682,6 +698,9 @@ fn spawn_webview<R: Runtime>(
     builder = builder.initialization_script(BUSY_TRACKER);
     builder = builder.initialization_script(LINK_HINTS);
     builder = builder.initialization_script(READER);
+    if let Some(script) = recall_script {
+        builder = builder.initialization_script(script);
+    }
 
     // Once a page settles, lift its text out and hand it to the chrome to
     // index. Private windows are skipped: the point of them is that
@@ -724,6 +743,8 @@ fn spawn_webview<R: Runtime>(
 
         let hooked = app.clone();
         let index_pages = !incognito;
+        let capture_id = id.to_string();
+        let capture_window = window.label().to_string();
         builder = builder.on_page_load(move |webview, payload| {
             if payload.event() != PageLoadEvent::Finished {
                 return;
@@ -750,9 +771,17 @@ fn spawn_webview<R: Runtime>(
             if !index_pages {
                 return;
             }
+            let metadata = {
+                let manager = hooked.state::<TabManager>();
+                let managers = manager.0.lock().unwrap();
+                managers.get(&capture_window).and_then(|inner| recall::capture_metadata(inner, &capture_id, &url))
+            };
+            let Some(metadata) = metadata else { return; };
             let handle = hooked.clone();
+            let tab_id = capture_id.clone();
+            let window_label = capture_window.clone();
             let _ = webview.eval_with_callback(
-                "JSON.stringify({t: document.title || '', b: (document.body ? document.body.innerText : '').slice(0, 40000)})",
+                recall::CAPTURE_SCRIPT,
                 move |raw| {
                     // eval hands back a JSON string literal, so it needs
                     // unwrapping once before it's an object.
@@ -762,13 +791,26 @@ fn spawn_webview<R: Runtime>(
                     let Ok(page) = serde_json::from_str::<CapturedPage>(&inner) else {
                         return;
                     };
-                    if page.b.trim().is_empty() {
+                    if page.u != url || page.b.trim().is_empty() {
                         return;
                     }
+                    // A late extraction must never be attached to a different navigation.
+                    let manager = handle.state::<TabManager>();
+                    let managers = manager.0.lock().unwrap();
+                    let valid = managers.get(&window_label).is_some_and(|inner| {
+                        !inner.is_private && inner.tabs.iter().any(|tab| tab.id == tab_id && tab.url == url)
+                    });
+                    drop(managers);
+                    if !valid { return; }
                     let _ = handle.emit_to(
                         EventTarget::webview(MAIN_WINDOW_LABEL),
                         "page-captured",
-                        IndexedPage { url: url.clone(), title: page.t, body: page.b },
+                        IndexedPage {
+                            url: url.clone(), title: page.t.chars().take(2000).collect(),
+                            body: page.b.chars().take(40000).collect(),
+                            captured_at: metadata.captured_at, space_id: Some(metadata.space_id.clone()),
+                            space_name: Some(metadata.space_name.clone()), session_id: Some(metadata.session_id.clone()),
+                        },
                     );
                 },
             );
@@ -1031,6 +1073,13 @@ fn open_tab<R: Runtime>(
     url: String,
     title: String,
 ) -> Result<TabInfo, String> {
+    open_tab_with_script(app, window, inner, url, title, None)
+}
+
+fn open_tab_with_script<R: Runtime>(
+    app: &AppHandle<R>, window: &Window<R>, inner: &mut Inner,
+    url: String, title: String, recall_script: Option<&str>,
+) -> Result<TabInfo, String> {
     let id = (NEXT_TAB_ID.fetch_add(1, Ordering::Relaxed) + 1).to_string();
     let group_id = inner.active_group_id.clone();
 
@@ -1039,7 +1088,7 @@ fn open_tab<R: Runtime>(
     // That's why a new tab costs nothing until it holds a real page.
     if !url.is_empty() {
         let parsed = url.parse().map_err(|e| format!("invalid url: {e}"))?;
-        spawn_webview(app, window, &id, parsed, 0.0, inner.tab_strip_visible, inner.content_offset, inner.is_private)
+        spawn_webview_with_script(app, window, &id, parsed, 0.0, inner.tab_strip_visible, inner.content_offset, inner.is_private, recall_script)
             .map_err(|e| e.to_string())?;
     }
 

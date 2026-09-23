@@ -23,9 +23,17 @@ export type IconName =
   | "star-filled"
   | "history"
   | "fork"
-  | "package";
+  | "package"
+  | "recall";
 
 const PATHS: Record<IconName, ReactNode> = {
+  recall: (
+    <>
+      <path d="M3 3.5h8v3M3 3.5v9h4M5 6h3M5 8.5h1" />
+      <circle cx="10.5" cy="10" r="2.5" />
+      <path d="m12.3 11.8 2 2" />
+    </>
+  ),
   package: (
     <>
       <path d="M3 4.5 8 2l5 2.5v7L8 14l-5-2.5Z" />
