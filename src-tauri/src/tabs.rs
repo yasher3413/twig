@@ -384,6 +384,7 @@ struct CapturedPage {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct IndexedPage {
+    tab_id: String,
     url: String,
     title: String,
     body: String,
@@ -452,6 +453,10 @@ struct Inner {
     /// position moves - the size is left alone so the page doesn't
     /// re-layout, it just slides and clips at the bottom.
     content_offset: f64,
+    /// Pixels reserved on the right for a chrome side panel (what changed on
+    /// this page). Unlike `content_offset` this does resize the page - a
+    /// side panel is read alongside the page, so the page must stay whole.
+    content_inset: f64,
     overlay_active: bool,
     /// Private windows use a non-persistent webview data store (no cookies
     /// or site data written to disk) and skip history/bookmark recording
@@ -476,6 +481,7 @@ impl Default for Inner {
             tab_strip_visible: true,
             closed_stack: Vec::new(),
             content_offset: 0.0,
+            content_inset: 0.0,
             overlay_active: false,
             is_private: false,
         }
@@ -593,11 +599,11 @@ fn top_offset<R: Runtime>(window: &Window<R>, tab_strip_visible: bool) -> f64 {
 
 /// The window area available for tab content: the full window width, minus
 /// the chrome band along the top.
-fn content_area<R: Runtime>(window: &Window<R>, tab_strip_visible: bool) -> tauri::Result<LogicalSize<f64>> {
+fn content_area<R: Runtime>(window: &Window<R>, tab_strip_visible: bool, content_inset: f64) -> tauri::Result<LogicalSize<f64>> {
     let scale = window.scale_factor()?;
     let logical = window.inner_size()?.to_logical::<f64>(scale);
     Ok(LogicalSize::new(
-        logical.width.max(0.0),
+        (logical.width - content_inset).max(0.0),
         (logical.height - top_offset(window, tab_strip_visible)).max(0.0),
     ))
 }
@@ -606,9 +612,10 @@ fn content_bounds<R: Runtime>(
     window: &Window<R>,
     tab_strip_visible: bool,
     content_offset: f64,
+    content_inset: f64,
 ) -> tauri::Result<(LogicalPosition<f64>, LogicalSize<f64>)> {
     let y_offset = top_offset(window, tab_strip_visible) + content_offset;
-    let area = content_area(window, tab_strip_visible)?;
+    let area = content_area(window, tab_strip_visible, content_inset)?;
     Ok((LogicalPosition::new(0.0, y_offset), area))
 }
 
@@ -617,13 +624,14 @@ fn split_bounds<R: Runtime>(
     window: &Window<R>,
     tab_strip_visible: bool,
     content_offset: f64,
+    content_inset: f64,
 ) -> tauri::Result<(
     (LogicalPosition<f64>, LogicalSize<f64>),
     (LogicalPosition<f64>, LogicalSize<f64>),
 )> {
     let x_offset = 0.0;
     let y_offset = top_offset(window, tab_strip_visible) + content_offset;
-    let area = content_area(window, tab_strip_visible)?;
+    let area = content_area(window, tab_strip_visible, content_inset)?;
     let half = ((area.width - SPLIT_GAP) / 2.0).max(0.0);
     let left = (LogicalPosition::new(x_offset, y_offset), LogicalSize::new(half, area.height));
     let right = (
@@ -658,7 +666,8 @@ fn spawn_webview_with_script<R: Runtime>(
     scroll_y: f64, tab_strip_visible: bool, content_offset: f64, incognito: bool,
     recall_script: Option<&str>,
 ) -> tauri::Result<Webview<R>> {
-    let (position, size) = content_bounds(window, tab_strip_visible, content_offset)?;
+    // Newly spawned tabs are re-placed by sync_visible_webviews, which applies the inset.
+    let (position, size) = content_bounds(window, tab_strip_visible, content_offset, 0.0)?;
     let label = tab_label(id);
     let app_handle = app.clone();
     let nav_id = id.to_string();
@@ -806,6 +815,7 @@ fn spawn_webview_with_script<R: Runtime>(
                         EventTarget::webview(MAIN_WINDOW_LABEL),
                         "page-captured",
                         IndexedPage {
+                            tab_id: tab_id.clone(),
                             url: url.clone(), title: page.t.chars().take(2000).collect(),
                             body: page.b.chars().take(40000).collect(),
                             captured_at: metadata.captured_at, space_id: Some(metadata.space_id.clone()),
@@ -853,7 +863,7 @@ fn sync_visible_webviews<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, inn
     let group = inner.active_group();
     match &group.split_id {
         Some(split_id) => {
-            let Ok((left, right)) = split_bounds(window, inner.tab_strip_visible, inner.content_offset) else {
+            let Ok((left, right)) = split_bounds(window, inner.tab_strip_visible, inner.content_offset, inner.content_inset) else {
                 return;
             };
             if let Some(active) = &group.active_id {
@@ -862,7 +872,7 @@ fn sync_visible_webviews<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, inn
             place(app, split_id, right);
         }
         None => {
-            let Ok(bounds) = content_bounds(window, inner.tab_strip_visible, inner.content_offset) else {
+            let Ok(bounds) = content_bounds(window, inner.tab_strip_visible, inner.content_offset, inner.content_inset) else {
                 return;
             };
             if let Some(active) = &group.active_id {
@@ -1499,6 +1509,26 @@ pub fn set_content_offset<R: Runtime>(
         return Ok(());
     }
     inner.content_offset = offset.max(0.0);
+    sync_visible_webviews(&app, &window, inner);
+    Ok(())
+}
+
+/// Narrows the visible page from the right so a chrome side panel can sit
+/// beside it. The page re-lays out at the narrower width; 0 restores it.
+#[tauri::command]
+pub fn set_content_inset<R: Runtime>(
+    app: AppHandle<R>,
+    window: Window<R>,
+    manager: State<'_, TabManager>,
+    right: f64,
+) -> Result<(), String> {
+    let mut managers = manager.0.lock().unwrap();
+    let inner = inner_for(&mut managers, &window);
+    let right = right.max(0.0);
+    if (inner.content_inset - right).abs() < f64::EPSILON {
+        return Ok(());
+    }
+    inner.content_inset = right;
     sync_visible_webviews(&app, &window, inner);
     Ok(())
 }

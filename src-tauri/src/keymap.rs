@@ -62,6 +62,7 @@ const ACTIONS: &[Action] = &[
     a("show-bookmarks", "Show Bookmarks", "History", "CmdOrCtrl+Shift+O", false),
     a("show-history", "Show History", "History", "CmdOrCtrl+Y", true),
     a("show-recall", "Recall a Passage…", "History", "CmdOrCtrl+Shift+F", false),
+    a("show-changes", "Show What Changed…", "History", "", false),
     a("show-checkpoints", "Checkpoints…", "History", "CmdOrCtrl+Shift+H", false),
     a("show-research-packages", "Research Packages…", "History", "CmdOrCtrl+Shift+P", false),
 

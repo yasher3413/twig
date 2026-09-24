@@ -155,6 +155,7 @@ pub fn run() {
             tabs::clear_site_data,
             tabs::set_search_engine,
             tabs::set_content_offset,
+            tabs::set_content_inset,
             tabs::set_hot_cap,
             keymap::get_keymap,
             keymap::set_keymap,

@@ -70,6 +70,12 @@ export function setContentOffset(offset: number): Promise<void> {
   return invoke("set_content_offset", { offset });
 }
 
+/** Narrows the page from the right for a side panel read alongside it.
+ *  Pass 0 to give the page its full width back. */
+export function setContentInset(right: number): Promise<void> {
+  return invoke("set_content_inset", { right });
+}
+
 const overlayOwners = new Set<string>();
 let overlayUpdate: Promise<void> = Promise.resolve();
 

@@ -13,6 +13,8 @@ export interface RecallCapture {
   spaceId: string | null;
   spaceName: string | null;
   sessionId: string | null;
+  // Set by native captures; used for change detection, never stored.
+  tabId?: string;
 }
 
 export interface RecallMatch extends Omit<RecallCapture, "body"> {
