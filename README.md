@@ -8,6 +8,24 @@ person who keeps 50-100+ tabs open, that adds up fast. twig is built
 around the opposite assumption: tabs you aren't looking at shouldn't
 cost you anything.
 
+## Download
+
+**[Download twig for Mac (Apple Silicon)](https://github.com/yasher3413/twig/releases/latest/download/twig-macos-arm64.dmg)**
+
+Open the `.dmg` and drag twig into Applications. Requires a Mac with an Apple
+chip (M1 or newer); Intel Macs aren't supported yet.
+
+twig isn't notarized by Apple yet, so the first launch needs one extra step:
+
+1. Open twig. macOS says it can't verify the app. Click **Done**.
+2. Open **System Settings → Privacy & Security**, scroll down, and click
+   **Open Anyway** next to the message about twig. Confirm with your password.
+
+After that it opens normally. If you'd rather use Terminal, this does the same
+thing: `xattr -dr com.apple.quarantine /Applications/twig.app`
+
+All releases and notes are on the [releases page](https://github.com/yasher3413/twig/releases).
+
 ## How
 
 - **Native webview, not bundled Chromium.** twig is built on
