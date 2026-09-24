@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { useTabStore } from "../store/tabs";
 import { setOverlayActive } from "../lib/tabs";
 import {
@@ -10,6 +9,7 @@ import {
   type ResearchSource, type SavedResearchPackage,
 } from "../lib/research";
 import { Icon } from "./Icon";
+import { useMenuAction } from "../lib/menu";
 import "./ResearchPackages.css";
 
 interface Request { source?: ResearchSource; excerpt?: ResearchExcerpt | null }
@@ -27,12 +27,12 @@ export function ResearchPackages() {
       setRequest((event as CustomEvent<Request>).detail ?? {});
     }
     window.addEventListener("twig:research", show);
-    const unlisten = listen<string>("menu-action", ({ payload }) => {
-      if (payload === "show-research-packages") void openResearchPackages();
-      if (payload === "package-current-space") void openResearchPackages("current");
-    });
-    return () => { window.removeEventListener("twig:research", show); unlisten.then((fn) => fn()); };
+    return () => window.removeEventListener("twig:research", show);
   }, []);
+
+  useMenuAction(["show-research-packages", "package-current-space"], (id) =>
+    void openResearchPackages(id === "package-current-space" ? "current" : undefined),
+  );
 
   return request && !isPrivate ? <PackageBrowser request={request} onClose={close} /> : null;
 }

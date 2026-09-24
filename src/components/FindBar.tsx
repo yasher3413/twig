@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { findInPage } from "../lib/tabs";
 import { useTabStore } from "../store/tabs";
 import { Icon } from "./Icon";
+import { useMenuAction } from "../lib/menu";
 import "./FindBar.css";
 
 // Find-in-page stays visible over the active tab's content (unlike the
@@ -15,16 +15,7 @@ export function FindBar() {
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const unlisten = listen<string>("menu-action", (event) => {
-      if (event.payload === "find-in-page") {
-        setOpen((o) => !o);
-      }
-    });
-    return () => {
-      unlisten.then((f) => f());
-    };
-  }, []);
+  useMenuAction(["find-in-page"], () => setOpen((o) => !o));
 
   useEffect(() => {
     if (open) {

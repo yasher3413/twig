@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { clearSiteData, memoryStats, setOverlayActive, type MemoryStats } from "../lib/tabs";
 import { clearHistory, historyCount } from "../lib/db";
 import {
@@ -11,6 +10,7 @@ import {
 import { Icon } from "./Icon";
 import { useTabStore } from "../store/tabs";
 import { recallCount } from "../lib/recall-db";
+import { useMenuAction } from "../lib/menu";
 import "./SettingsPanel.css";
 
 const THEME_OPTIONS: { id: ThemeMode; label: string }[] = [
@@ -43,14 +43,7 @@ export function SettingsPanel() {
   const [cleared, setCleared] = useState<string | null>(null);
   const [memory, setMemory] = useState<MemoryStats | null>(null);
 
-  useEffect(() => {
-    const unlisten = listen<string>("menu-action", (event) => {
-      if (event.payload === "settings") togglePanel();
-    });
-    return () => {
-      unlisten.then((f) => f());
-    };
-  }, [togglePanel]);
+  useMenuAction(["settings"], togglePanel);
 
   useEffect(() => {
     setOverlayActive(panelOpen, "settings");

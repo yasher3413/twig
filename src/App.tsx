@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { onMenuAction } from "./lib/menu";
 import { TabStrip } from "./components/TabStrip";
 import { AddressBar } from "./components/AddressBar";
 import { FindBar } from "./components/FindBar";
@@ -19,18 +20,25 @@ import { indexPage } from "./lib/db";
 import "./App.css";
 
 function App() {
-  const { tabs, activeId, splitId } = useTabStore();
-  const activeTab = tabs.find((t) => t.id === activeId) ?? null;
   // A tab with no URL has no webview of its own, so this is what fills the
   // window for it. Never during a split - that pairs two real pages.
-  const showNewTab = !!activeTab && isNewTab(activeTab.url) && !splitId;
+  //
+  // Selected as a boolean on purpose. App renders every piece of chrome and
+  // none of it is memoised, so subscribing to the whole store here meant
+  // every tabs-changed - fired on every navigation and every title update -
+  // re-rendered the palette, library, settings and all the rest. Now App
+  // only renders when this flips.
+  const showNewTab = useTabStore((s) => {
+    const active = s.tabs.find((t) => t.id === s.activeId);
+    return !!active && isNewTab(active.url) && !s.splitId;
+  });
 
   useEffect(() => {
     useSettingsStore.getState().init();
 
-    const unlistenAction = listen<string>("menu-action", (event) => {
+    const unlistenAction = onMenuAction((id) => {
       const store = useTabStore.getState();
-      switch (event.payload) {
+      switch (id) {
         case "new-tab":
           store.newTab();
           break;
@@ -62,7 +70,7 @@ function App() {
         case "zoom-out":
         case "zoom-reset":
           if (store.activeId) {
-            const dir = event.payload === "zoom-in" ? 1 : event.payload === "zoom-out" ? -1 : 0;
+            const dir = id === "zoom-in" ? 1 : id === "zoom-out" ? -1 : 0;
             zoomTab(store.activeId, dir);
           }
           break;
@@ -71,7 +79,7 @@ function App() {
           const spaceTabs = store.tabs.filter((t) => t.groupId === store.activeGroupId);
           if (spaceTabs.length > 1 && store.activeId) {
             const at = spaceTabs.findIndex((t) => t.id === store.activeId);
-            const step = event.payload === "next-tab" ? 1 : -1;
+            const step = id === "next-tab" ? 1 : -1;
             // Wraps, the way every browser's tab cycling does.
             const next = (at + step + spaceTabs.length) % spaceTabs.length;
             store.switchTo(spaceTabs[next].id);
@@ -104,7 +112,7 @@ function App() {
     });
 
     return () => {
-      unlistenAction.then((f) => f());
+      unlistenAction();
       unlistenGoto.then((f) => f());
       unlistenCapture.then((f) => f());
     };

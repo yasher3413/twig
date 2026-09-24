@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { useTabStore } from "../store/tabs";
 import { setOverlayActive, isInternalUrl } from "../lib/tabs";
 import {
@@ -8,6 +7,7 @@ import {
 } from "../lib/checkpoints";
 import { Icon } from "./Icon";
 import { hostOf } from "./SiteMark";
+import { useMenuAction } from "../lib/menu";
 import "./Checkpoints.css";
 import { openResearchPackages } from "../lib/research";
 
@@ -32,16 +32,12 @@ export function Checkpoints() {
       }
     }
     window.addEventListener("twig:checkpoints", show);
-    const unlisten = listen<string>("menu-action", ({ payload }) => {
-      if (payload === "show-checkpoints" || payload === "save-checkpoint") {
-        openCheckpoints(payload === "save-checkpoint");
-      }
-    });
-    return () => {
-      window.removeEventListener("twig:checkpoints", show);
-      unlisten.then((fn) => fn());
-    };
+    return () => window.removeEventListener("twig:checkpoints", show);
   }, []);
+
+  useMenuAction(["show-checkpoints", "save-checkpoint"], (id) =>
+    openCheckpoints(id === "save-checkpoint"),
+  );
 
   return open && !isPrivate
     ? <CheckpointBrowser saveRequested={saveRequested} onClose={close} />

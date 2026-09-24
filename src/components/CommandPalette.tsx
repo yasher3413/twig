@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { emit, listen } from "@tauri-apps/api/event";
+import { emit } from "@tauri-apps/api/event";
 import { useTabStore } from "../store/tabs";
 import { isInternalUrl, openPrivateWindow, setOverlayActive } from "../lib/tabs";
 import {
@@ -13,6 +13,7 @@ import {
   type HistoryEntry,
   type PageMatch,
 } from "../lib/db";
+import { useMenuAction } from "../lib/menu";
 import "./CommandPalette.css";
 import { openCheckpoints } from "../lib/checkpoints";
 import { openResearchPackages } from "../lib/research";
@@ -45,19 +46,10 @@ export function CommandPalette() {
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? null;
 
-  useEffect(() => {
-    // Triggered via a native menu accelerator, not a page-level keydown
-    // listener: the active tab's webview usually holds keyboard focus,
-    // which is a separate context our chrome's own listeners can't see.
-    const unlisten = listen<string>("menu-action", (event) => {
-      if (event.payload === "command-palette") {
-        setOpen((o) => !o);
-      }
-    });
-    return () => {
-      unlisten.then((f) => f());
-    };
-  }, []);
+  // Triggered via a native menu accelerator, not a page-level keydown
+  // listener: the active tab's webview usually holds keyboard focus,
+  // which is a separate context our chrome's own listeners can't see.
+  useMenuAction(["command-palette"], () => setOpen((o) => !o));
 
   useEffect(() => {
     setOverlayActive(open, "palette");

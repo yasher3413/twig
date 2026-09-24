@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { useShallow } from "zustand/react/shallow";
 import { useTabStore } from "../store/tabs";
 import { useSettingsStore } from "../store/settings";
 import { goBack, goForward, isInternalUrl, reloadTab, setContentOffset } from "../lib/tabs";
@@ -15,6 +15,7 @@ import {
 import { SEARCH_ENGINES } from "../store/settings";
 import { SpaceSwitcher } from "./SpaceSwitcher";
 import { Icon } from "./Icon";
+import { useMenuAction } from "../lib/menu";
 import "./AddressBar.css";
 import { openCheckpoints } from "../lib/checkpoints";
 import { openResearchPackages } from "../lib/research";
@@ -59,10 +60,22 @@ function inlineCompletion(typed: string, urls: string[]): string | null {
 // ADDRESS_BAR_HEIGHT in src-tauri/src/tabs.rs) - the tab's own webview
 // never covers this band, so it's safe to draw here.
 export function AddressBar() {
-  const { tabs, activeId, tabStripVisible, isPrivate, navigate } = useTabStore();
+  const { activeId, tabStripVisible, isPrivate, navigate } = useTabStore(
+    useShallow((s) => ({
+      activeId: s.activeId,
+      tabStripVisible: s.tabStripVisible,
+      isPrivate: s.isPrivate,
+      navigate: s.navigate,
+    })),
+  );
+  // Tab objects are rebuilt on every tabs-changed, but their fields are all
+  // primitives, so a shallow compare keeps the bar still unless the *active*
+  // tab actually changed - not whenever some background tab updates.
+  const activeTab = useTabStore(
+    useShallow((s) => s.tabs.find((t) => t.id === s.activeId) ?? null),
+  );
   const togglePanel = useSettingsStore((s) => s.togglePanel);
   const searchEngineId = useSettingsStore((s) => s.searchEngineId);
-  const activeTab = tabs.find((t) => t.id === activeId) ?? null;
   // `typed` is what you actually entered; `draft` is what's on screen,
   // which may carry an inline completion after it. Keeping them apart is
   // what stops a completion from being re-read as input and completed
@@ -112,17 +125,13 @@ export function AddressBar() {
     setBookmarked(!bookmarked);
   }
 
-  useEffect(() => {
-    const unlisten = listen<string>("menu-action", (event) => {
-      if (event.payload === "focus-address") {
-        inputRef.current?.focus();
-        inputRef.current?.select();
-      }
-      if (event.payload === "bookmark") toggleBookmark();
-    });
-    return () => {
-      unlisten.then((f) => f());
-    };
+  useMenuAction(["focus-address", "bookmark"], (id) => {
+    if (id === "focus-address") {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    } else {
+      toggleBookmark();
+    }
   });
 
   // Build the suggestion list as you type. Suggestions wait for an actual

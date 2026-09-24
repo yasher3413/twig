@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { useTabStore } from "../store/tabs";
 import { setOverlayActive } from "../lib/tabs";
 import { dateInputValue, localDayBounds, openRecall, openRecalledPage, passageFromSnippet, readingParts, snippetParts, type TextPart } from "../lib/recall";
 import { deleteRecallCopy, deleteRecallUrl, getRecallCopy, nearbyRecall, recallSpaces, searchRecall, type RecallCopy, type RecallMatch } from "../lib/recall-db";
 import { Icon } from "./Icon";
+import { useMenuAction } from "../lib/menu";
 import "./Recall.css";
 
 function Highlighted({ parts }: { parts: TextPart[] }) {
@@ -28,15 +28,13 @@ export function Recall() {
     function failed(event: Event) { setCaptureWarning(String((event as CustomEvent).detail)); }
     window.addEventListener("twig:recall", show);
     window.addEventListener("twig:recall-index-error", failed);
-    const unlisten = listen<string>("menu-action", ({ payload }) => {
-      if (payload === "show-recall") openRecall();
-    });
     return () => {
       window.removeEventListener("twig:recall", show);
       window.removeEventListener("twig:recall-index-error", failed);
-      unlisten.then((fn) => fn());
     };
   }, []);
+
+  useMenuAction(["show-recall"], () => openRecall());
   return request && !isPrivate ? <RecallBrowser initialQuery={request.query} captureWarning={captureWarning}
     dismissWarning={() => setCaptureWarning(null)} onClose={close} /> : null;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useTabStore } from "../store/tabs";
 import { historyCount, topSites, searchBookmarks, type Bookmark, type HistoryEntry } from "../lib/db";
 import { Icon } from "./Icon";
@@ -13,7 +14,15 @@ import { openRecall } from "../lib/recall";
 // page inside a tab webview has no access to them - and it's why an empty
 // tab holds no webview and costs no memory until you navigate.
 export function NewTabPage() {
-  const { tabs, activeId, isPrivate, tabStripVisible, navigate } = useTabStore();
+  const { activeId, isPrivate, tabStripVisible, navigate } = useTabStore(
+    useShallow((s) => ({
+      activeId: s.activeId,
+      isPrivate: s.isPrivate,
+      tabStripVisible: s.tabStripVisible,
+      navigate: s.navigate,
+    })),
+  );
+  const sleeping = useTabStore((s) => s.tabs.filter((t) => t.status === "hibernated").length);
   const chromeHeight = (tabStripVisible ? 38 : 0) + 46;
   const [query, setQuery] = useState("");
   const [sites, setSites] = useState<HistoryEntry[]>([]);
@@ -21,7 +30,6 @@ export function NewTabPage() {
   const [pageCount, setPageCount] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const sleeping = tabs.filter((t) => t.status === "hibernated").length;
 
   useEffect(() => {
     requestAnimationFrame(() => inputRef.current?.focus());

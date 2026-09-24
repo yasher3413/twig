@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { useTabStore } from "../store/tabs";
 import { setOverlayActive } from "../lib/tabs";
 import {
@@ -15,6 +14,7 @@ import {
 } from "../lib/db";
 import { Icon } from "./Icon";
 import { SiteMark, hostOf } from "./SiteMark";
+import { useMenuAction } from "../lib/menu";
 import "./Library.css";
 
 type Shelf = "bookmarks" | "history" | "archive";
@@ -38,25 +38,19 @@ function whenever(ms: number): string {
 // of pages worth getting back to - so they share one surface rather than
 // three panels that would have been near-identical.
 export function Library() {
-  const { newTab, isPrivate } = useTabStore();
+  const newTab = useTabStore((s) => s.newTab);
+  const isPrivate = useTabStore((s) => s.isPrivate);
   const [open, setOpen] = useState(false);
   const [shelf, setShelf] = useState<Shelf>("bookmarks");
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
 
-  useEffect(() => {
-    const unlisten = listen<string>("menu-action", (event) => {
-      if (event.payload === "show-bookmarks" || event.payload === "show-history") {
-        if (isPrivate && event.payload === "show-history") return;
-        const next: Shelf = event.payload === "show-bookmarks" ? "bookmarks" : "history";
-        setOpen((was) => !(was && shelf === next));
-        setShelf(next);
-        setQuery("");
-      }
-    });
-    return () => {
-      unlisten.then((f) => f());
-    };
+  useMenuAction(["show-bookmarks", "show-history"], (id) => {
+    if (isPrivate && id === "show-history") return;
+    const next: Shelf = id === "show-bookmarks" ? "bookmarks" : "history";
+    setOpen((was) => !(was && shelf === next));
+    setShelf(next);
+    setQuery("");
   });
 
   useEffect(() => {
