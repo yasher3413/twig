@@ -70,6 +70,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/005_recall.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 6,
+            description: "snoozed tabs",
+            sql: include_str!("../migrations/006_snoozed.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
