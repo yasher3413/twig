@@ -149,6 +149,10 @@ textarea {
 /* Inputs that sit inside a wrapper which already lights up on focus. A
    ring here would draw a second box inside the first. */
 .omnibox-input:focus-visible,
+.palette-input:focus-visible,
+.library-search input:focus-visible,
+.keyed-filter input:focus-visible,
+.welcome-field input:focus-visible,
 .newtab-search input:focus-visible,
 .find-input:focus-visible,
 .space-rename:focus-visible {

@@ -50,7 +50,7 @@
 .branch-stem {
   fill: none;
   stroke: var(--border-strong);
-  stroke-width: 1.6;
+  stroke-width: 2;
   stroke-linecap: round;
 }
 
@@ -437,7 +437,7 @@
   background: var(--strip);
 }
 
-.welcome-stage.stage-keys {
+.welcome-stage.step-keys {
   place-items: stretch;
   padding: 32px 40px;
 }
@@ -1045,7 +1045,7 @@
   .welcome-stage {
     display: none;
   }
-  .welcome-stage.stage-keys {
+  .welcome-stage.step-keys {
     display: grid;
     grid-row: 2;
     max-height: 48vh;

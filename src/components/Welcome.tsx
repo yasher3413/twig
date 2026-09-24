@@ -149,9 +149,27 @@ function WelcomeFlow({ startAt, onFinish }: { startAt: WelcomeStep; onFinish: (f
   }, [onFinish]);
 
   const last = step === "ready";
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // aria-modal alone doesn't stop Tab from walking out into the toolbar
+  // behind, or a screen reader from listing those controls as if they
+  // were part of the dialog. Everything that was on screen when the
+  // welcome opened goes inert until it closes. Only what already existed
+  // is touched: the command palette the tour asks you to open is created
+  // afterwards and stays usable on top.
+  useEffect(() => {
+    const me = rootRef.current;
+    const host = me?.parentElement;
+    if (!me || !host) return;
+    const muted = [...host.children].filter((el) => el !== me && !el.hasAttribute("inert")) as HTMLElement[];
+    for (const el of muted) el.inert = true;
+    return () => {
+      for (const el of muted) el.inert = false;
+    };
+  }, []);
 
   return (
-    <div className="welcome" role="dialog" aria-modal="true" aria-labelledby="welcome-heading">
+    <div className="welcome" role="dialog" aria-modal="true" aria-labelledby="welcome-heading" ref={rootRef}>
       <div className="welcome-side">
         <header className="welcome-top">
           <Branch reached={stepIndex} total={STEPS.length} />
@@ -203,7 +221,7 @@ function WelcomeFlow({ startAt, onFinish }: { startAt: WelcomeStep; onFinish: (f
         </footer>
       </div>
 
-      <div className={`welcome-stage stage-${step}`} aria-hidden={step !== "keys"}>
+      <div className={`welcome-stage step-${step}`} aria-hidden={step !== "keys"}>
         {step === "welcome" && <StageSleepingTabs awake={3} total={14} caption />}
         {step === "you" && <StageYou imported={imported} />}
         {step === "look" && <StageMiniWindow />}
@@ -223,23 +241,23 @@ function WelcomeFlow({ startAt, onFinish }: { startAt: WelcomeStep; onFinish: (f
 // ---------------------------------------------------------------------
 
 function Branch({ reached, total }: { reached: number; total: number }) {
-  const width = 176;
+  const width = 232;
   const nodes = Array.from({ length: total }, (_, i) => 10 + (i * (width - 20)) / (total - 1));
   return (
-    <svg className="branch" width={width} height="34" viewBox={`0 0 ${width} 34`} aria-hidden="true">
-      <path className="branch-stem" d={`M2 20 C ${width * 0.3} 16, ${width * 0.6} 23, ${width - 2} 17`} />
+    <svg className="branch" width={width} height="44" viewBox={`0 0 ${width} 44`} aria-hidden="true">
+      <path className="branch-stem" d={`M2 26 C ${width * 0.3} 21, ${width * 0.6} 30, ${width - 2} 22`} />
       {nodes.map((x, i) => {
         const up = i % 2 === 0;
-        const y = 20 - (x / width) * 2.5;
+        const y = 26 - (x / width) * 3.5;
         const grown = i < reached;
         const current = i === reached;
         return (
           <g key={i} transform={`translate(${x} ${y})`}>
             <path
               className={grown ? "leaf grown" : "leaf"}
-              d={up ? "M0 0 C -2 -6, 4 -12, 9 -12 C 8 -6, 4 -2, 0 0 Z" : "M0 0 C -2 6, 4 12, 9 12 C 8 6, 4 2, 0 0 Z"}
+              d={up ? "M0 0 C -3 -9, 6 -17, 13 -17 C 12 -9, 6 -3, 0 0 Z" : "M0 0 C -3 9, 6 17, 13 17 C 12 9, 6 3, 0 0 Z"}
             />
-            <circle className={current ? "bud current" : grown ? "bud grown" : "bud"} r={current ? 3.2 : 2.3} />
+            <circle className={current ? "bud current" : grown ? "bud grown" : "bud"} r={current ? 4 : 2.8} />
           </g>
         );
       })}
