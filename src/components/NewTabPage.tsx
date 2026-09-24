@@ -4,6 +4,8 @@ import { useTabStore } from "../store/tabs";
 import { historyCount, topSites, searchBookmarks, type Bookmark, type HistoryEntry } from "../lib/db";
 import { Icon } from "./Icon";
 import { SiteMark, hostOf } from "./SiteMark";
+import { useSettingsStore } from "../store/settings";
+import { greeting } from "../lib/onboarding";
 import "./NewTabPage.css";
 import { openCheckpoints } from "../lib/checkpoints";
 import { openResearchPackages } from "../lib/research";
@@ -22,6 +24,7 @@ export function NewTabPage() {
       navigate: s.navigate,
     })),
   );
+  const profileName = useSettingsStore((st) => st.profileName);
   const sleeping = useTabStore((s) => s.tabs.filter((t) => t.status === "hibernated").length);
   const chromeHeight = (tabStripVisible ? 38 : 0) + 46;
   const [query, setQuery] = useState("");
@@ -54,6 +57,7 @@ export function NewTabPage() {
     <div className="newtab" style={{ top: chromeHeight }}>
       <div className="newtab-inner">
         <h1 className="newtab-mark">twig</h1>
+        {profileName && !isPrivate && <p className="newtab-greeting">{greeting(profileName)}</p>}
 
         <form
           className="newtab-search"

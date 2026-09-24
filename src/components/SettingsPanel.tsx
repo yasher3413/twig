@@ -3,6 +3,7 @@ import { clearSiteData, memoryStats, setOverlayActive, type MemoryStats } from "
 import { clearHistory, historyCount } from "../lib/db";
 import {
   ACCENT_SWATCHES,
+  MEMORY_STYLES,
   SEARCH_ENGINES,
   useSettingsStore,
   type ThemeMode,
@@ -11,6 +12,7 @@ import { Icon } from "./Icon";
 import { useTabStore } from "../store/tabs";
 import { recallCount } from "../lib/recall-db";
 import { useMenuAction } from "../lib/menu";
+import { openWelcome } from "../lib/onboarding";
 import "./SettingsPanel.css";
 
 const THEME_OPTIONS: { id: ThemeMode; label: string }[] = [
@@ -37,6 +39,8 @@ export function SettingsPanel() {
     setAccent,
     setSearchEngineId,
   } = useSettingsStore();
+  const hotCap = useSettingsStore((st) => st.hotCap);
+  const setHotCap = useSettingsStore((st) => st.setHotCap);
   const [pages, setPages] = useState(0);
   const [copies, setCopies] = useState(0);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -159,13 +163,63 @@ export function SettingsPanel() {
                 <span className="ledger-label">not spent</span>
               </div>
             </div>
+            <div className="settings-row">
+              <span className="settings-label">Tabs kept awake</span>
+              <div className="segmented">
+                {MEMORY_STYLES.map((m) => (
+                  <button
+                    key={m.id}
+                    className={m.cap === hotCap ? "segment selected" : "segment"}
+                    aria-pressed={m.cap === hotCap}
+                    title={m.blurb}
+                    onClick={() => setHotCap(m.cap)}
+                  >
+                    {m.label} · {m.cap}
+                  </button>
+                ))}
+              </div>
+            </div>
             <p className="settings-help">
-              Tabs you haven&apos;t looked at in 10 minutes go to sleep, and only 5 stay awake at
-              once. Sleeping tabs hand back their memory and wake where you left them — though a
+              Tabs you haven&apos;t looked at in 10 minutes go to sleep, and only {hotCap} stay
+              awake at once. Sleeping tabs hand back their memory and wake where you left them — though a
               tab that&apos;s playing something, or holding text you haven&apos;t sent, is left
               alone. &ldquo;Not spent&rdquo; estimates what the sleeping ones would cost at the
               current average.
             </p>
+          </section>
+
+          <section className="settings-group">
+            <h3>Shortcuts</h3>
+            <div className="settings-row">
+              <span className="settings-label">
+                Keyboard shortcuts
+                <span className="settings-sub">Every action in twig, yours to rebind</span>
+              </span>
+              <button
+                className="settings-button"
+                onClick={() => {
+                  closePanel();
+                  openWelcome("keys");
+                }}
+              >
+                Customize…
+              </button>
+            </div>
+            <div className="settings-row">
+              <span className="settings-label">
+                Welcome tour
+                <span className="settings-sub">Profile, import, and how twig works</span>
+              </span>
+              <button
+                className="settings-button"
+                onClick={() => {
+                  closePanel();
+                  openWelcome();
+                }}
+              >
+                Show again
+              </button>
+            </div>
           </section>
 
           <section className="settings-group">

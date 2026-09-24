@@ -8,6 +8,7 @@ import { CommandPalette } from "./components/CommandPalette";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { NewTabPage } from "./components/NewTabPage";
 import { Library } from "./components/Library";
+import { Welcome } from "./components/Welcome";
 import { Downloads } from "./components/Downloads";
 import { Checkpoints } from "./components/Checkpoints";
 import { ResearchPackages } from "./components/ResearchPackages";
@@ -125,6 +126,7 @@ function App() {
       {showNewTab && <NewTabPage />}
       <FindBar />
       <Library />
+      <Welcome />
       <Downloads />
       <Checkpoints />
       <ResearchPackages />

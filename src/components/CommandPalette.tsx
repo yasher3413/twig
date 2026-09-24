@@ -18,6 +18,7 @@ import { useMenuAction } from "../lib/menu";
 import { openCheckpoints } from "../lib/checkpoints";
 import { openResearchPackages } from "../lib/research";
 import { openRecall } from "../lib/recall";
+import { displayAccel, getKeymap, openWelcome } from "../lib/onboarding";
 import { Icon, type IconName } from "./Icon";
 import { SiteMark, hostOf } from "./SiteMark";
 import "./CommandPalette.css";
@@ -43,6 +44,24 @@ interface Section {
   title: string;
   items: Item[];
 }
+
+/** Palette command -> the menu action whose shortcut it should show. */
+const COMMAND_MENU_IDS: Record<string, string> = {
+  "cmd-new-tab": "new-tab",
+  "cmd-reopen": "reopen-closed-tab",
+  "cmd-private": "new-private-window",
+  "cmd-bookmarks": "show-bookmarks",
+  "cmd-history": "show-history",
+  "cmd-strip": "toggle-tab-strip",
+  "cmd-settings": "settings",
+  "cmd-recall": "show-recall",
+  "cmd-save-checkpoint": "save-checkpoint",
+  "cmd-checkpoints": "show-checkpoints",
+  "cmd-research": "show-research-packages",
+  "cmd-package": "package-current-space",
+  "cmd-bookmark": "bookmark",
+  "cmd-close": "close-tab",
+};
 
 function looksLikeUrl(query: string): boolean {
   const q = query.trim();
@@ -103,6 +122,9 @@ function Palette({ onClose }: { onClose: () => void }) {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [pages, setPages] = useState<PageMatch[]>([]);
   const [activeBookmarked, setActiveBookmarked] = useState(false);
+  // Shortcuts are customisable, so the labels come from the live keymap
+  // rather than being written into each command.
+  const [keymap, setKeymapLabels] = useState<Record<string, string>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -110,6 +132,9 @@ function Palette({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     requestAnimationFrame(() => inputRef.current?.focus());
+    getKeymap()
+      .then((all) => setKeymapLabels(Object.fromEntries(all.map((b) => [b.id, displayAccel(b.current).join("")]))))
+      .catch(() => {});
     if (!isPrivate && activeTab && !isInternalUrl(activeTab.url)) {
       isBookmarked(activeTab.url).then(setActiveBookmarked);
     }
@@ -246,6 +271,8 @@ function Palette({ onClose }: { onClose: () => void }) {
       { key: "cmd-history", kind: "command", label: "Show history", icon: "history", shortcut: "⌘Y", run: () => emit("menu-action", "show-history") },
       { key: "cmd-strip", kind: "command", label: "Toggle tab strip", icon: "split", shortcut: "⌘B", run: () => toggleTabStrip() },
       { key: "cmd-settings", kind: "command", label: "Settings", icon: "settings", shortcut: "⌘,", run: () => emit("menu-action", "settings") },
+      { key: "cmd-shortcuts", kind: "command", label: "Customize keyboard shortcuts", icon: "settings", run: () => openWelcome("keys") },
+      { key: "cmd-welcome", kind: "command", label: "Welcome to twig", icon: "star", run: () => openWelcome() },
     ];
     if (!isPrivate) {
       if (q) {
@@ -278,12 +305,16 @@ function Palette({ onClose }: { onClose: () => void }) {
     if (activeId) {
       commands.push({ key: "cmd-close", kind: "command", label: "Close tab", icon: "close", shortcut: "⌘W", run: () => close(activeId) });
     }
+    for (const cmd of commands) {
+      const menuId = COMMAND_MENU_IDS[cmd.key];
+      if (menuId && menuId in keymap) cmd.shortcut = keymap[menuId] || undefined;
+    }
     const matched = commands.filter((c) => c.key === "cmd-recall-query" || !q || c.label.toLowerCase().includes(q));
     if (matched.length) out.push({ id: "commands", title: "Commands", items: matched });
 
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, tabs, activeId, activeTab, activeBookmarked, history, bookmarks, pages, isPrivate]);
+  }, [query, tabs, activeId, activeTab, activeBookmarked, history, bookmarks, pages, isPrivate, keymap]);
 
   const flat = useMemo(() => sections.flatMap((s) => s.items), [sections]);
   const current = flat[Math.min(selected, flat.length - 1)];

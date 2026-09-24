@@ -180,6 +180,29 @@ export async function deleteArchiveUrl(url: string): Promise<void> {
   await db.execute("DELETE FROM archive WHERE url = $1", [url]);
 }
 
+/** Adds many bookmarks at once and returns how many were actually new.
+ *  Imports can run to thousands of rows, so they go in chunks of
+ *  multi-row inserts rather than one IPC round trip each; URLs already
+ *  bookmarked are left alone. */
+export async function importBookmarks(items: { url: string; title: string }[]): Promise<number> {
+  const before = await db.select<{ n: number }[]>("SELECT COUNT(*) as n FROM bookmarks");
+  const now = Date.now();
+  const CHUNK = 150;
+  for (let start = 0; start < items.length; start += CHUNK) {
+    const slice = items.slice(start, start + CHUNK);
+    const values = slice.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`).join(", ");
+    // Timestamps count down, so sorting newest-first - which is how the
+    // library lists bookmarks - reproduces the order you kept them in.
+    const params = slice.flatMap((b, i) => [b.url, b.title || b.url, now - (start + i)]);
+    await db.execute(
+      `INSERT INTO bookmarks (url, title, created_at) VALUES ${values} ON CONFLICT(url) DO NOTHING`,
+      params,
+    );
+  }
+  const after = await db.select<{ n: number }[]>("SELECT COUNT(*) as n FROM bookmarks");
+  return (after[0]?.n ?? 0) - (before[0]?.n ?? 0);
+}
+
 export async function addBookmark(url: string, title: string): Promise<void> {
   await db.execute(
     "INSERT INTO bookmarks (url, title, created_at) VALUES ($1, $2, $3) ON CONFLICT(url) DO NOTHING",

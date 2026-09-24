@@ -45,3 +45,10 @@ export function useMenuAction(ids: readonly string[], handler: Handler) {
     });
   }, [key]);
 }
+
+/** Runs a menu action from inside the chrome, exactly as if its shortcut
+ *  had been pressed - the welcome uses this to hand you to the address
+ *  bar when it finishes. */
+export function dispatchMenuAction(id: string) {
+  for (const handler of handlers) handler(id);
+}

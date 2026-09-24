@@ -36,7 +36,7 @@ const SPLIT_GAP: f64 = 1.0;
 /// *all* spaces combined, within a single window. Opening or activating a
 /// tab beyond this count hibernates the least-recently-used hot tab. Not
 /// user-configurable yet; that'll come with the settings UI.
-const MAX_HOT_TABS: usize = 5;
+static MAX_HOT_TABS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(5);
 
 /// How long a hot tab can sit outside the current space's view before it's
 /// hibernated on its own, independent of the LRU cap above. Not
@@ -974,7 +974,7 @@ fn enforce_hot_cap<R: Runtime>(app: &AppHandle<R>, inner: &mut Inner, keep_ids: 
     let mut skipped: Vec<String> = Vec::new();
     loop {
         let hot_count = inner.tabs.iter().filter(|t| t.status == TabStatus::Hot).count();
-        if hot_count <= MAX_HOT_TABS {
+        if hot_count <= MAX_HOT_TABS.load(Ordering::Relaxed) {
             return;
         }
         let oldest = inner
@@ -2015,6 +2015,27 @@ pub fn follow_link<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), Stri
             .map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+/// How many tabs may stay awake at once. Chosen during setup ("frugal",
+/// "balanced", "roomy") and applied straight away, so lowering it sends
+/// the excess to sleep now rather than on the next tab switch. Busy tabs
+/// are still exempt - see `hibernate`.
+#[tauri::command]
+pub fn set_hot_cap<R: Runtime>(
+    app: AppHandle<R>,
+    manager: State<'_, TabManager>,
+    cap: usize,
+) -> usize {
+    let cap = cap.clamp(2, 12);
+    MAX_HOT_TABS.store(cap, Ordering::Relaxed);
+    let mut managers = manager.0.lock().unwrap();
+    for (label, inner) in managers.iter_mut() {
+        let keep = visible_ids(inner);
+        enforce_hot_cap(&app, inner, &keep);
+        emit_tabs_changed(&app, label, inner);
+    }
+    cap
 }
 
 /// Live memory accounting for the current window.

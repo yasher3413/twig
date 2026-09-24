@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { setSearchEngine } from "../lib/tabs";
+import { setHotCap as pushHotCap, setSearchEngine } from "../lib/tabs";
 
 export type ThemeMode = "system" | "light" | "dark";
 
@@ -37,6 +37,15 @@ export const SEARCH_ENGINES: SearchEngine[] = [
 const THEME_KEY = "twig:theme-mode";
 const ACCENT_KEY = "twig:accent";
 const SEARCH_KEY = "twig:search-engine";
+const NAME_KEY = "twig:profile-name";
+const HOT_CAP_KEY = "twig:hot-cap";
+
+/** How many tabs stay awake. Named for what they feel like, not the number. */
+export const MEMORY_STYLES = [
+  { id: "frugal", label: "Frugal", cap: 3, blurb: "Three awake. Everything else sleeps." },
+  { id: "balanced", label: "Balanced", cap: 5, blurb: "Five awake — the default." },
+  { id: "roomy", label: "Roomy", cap: 10, blurb: "Ten awake, for machines with memory to spare." },
+] as const;
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace("#", "");
@@ -54,11 +63,16 @@ interface SettingsStore {
   themeMode: ThemeMode;
   accentId: string;
   searchEngineId: string;
+  /** Lives only on this Mac; used to greet you on new tabs. */
+  profileName: string;
+  hotCap: number;
   panelOpen: boolean;
   init: () => void;
   setThemeMode: (mode: ThemeMode) => void;
   setAccent: (id: string) => void;
   setSearchEngineId: (id: string) => void;
+  setProfileName: (name: string) => void;
+  setHotCap: (cap: number) => void;
   togglePanel: () => void;
   closePanel: () => void;
 }
@@ -97,6 +111,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     themeMode: "system",
     accentId: "moss",
     searchEngineId: "google",
+    profileName: "",
+    hotCap: 5,
     panelOpen: false,
     togglePanel() {
       set((s) => ({ panelOpen: !s.panelOpen }));
@@ -108,7 +124,17 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       const storedTheme = (localStorage.getItem(THEME_KEY) as ThemeMode | null) ?? "system";
       const storedAccent = localStorage.getItem(ACCENT_KEY) ?? "moss";
       const storedSearch = localStorage.getItem(SEARCH_KEY) ?? "google";
-      set({ themeMode: storedTheme, accentId: storedAccent, searchEngineId: storedSearch });
+      const storedName = localStorage.getItem(NAME_KEY) ?? "";
+      const storedCap = Number(localStorage.getItem(HOT_CAP_KEY)) || 5;
+      set({
+        themeMode: storedTheme,
+        accentId: storedAccent,
+        searchEngineId: storedSearch,
+        profileName: storedName,
+        hotCap: storedCap,
+      });
+      // Like the search engine, the cap is enforced in Rust.
+      pushHotCap(storedCap);
       applyTheme(storedTheme);
       applyAccent(storedAccent);
       applySearchEngine(storedSearch);
@@ -129,6 +155,16 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       localStorage.setItem(ACCENT_KEY, id);
       set({ accentId: id });
       applyAccent(id);
+    },
+    setProfileName(name) {
+      const clean = name.trim().slice(0, 40);
+      localStorage.setItem(NAME_KEY, clean);
+      set({ profileName: clean });
+    },
+    setHotCap(cap) {
+      localStorage.setItem(HOT_CAP_KEY, String(cap));
+      set({ hotCap: cap });
+      pushHotCap(cap);
     },
     setSearchEngineId(id) {
       localStorage.setItem(SEARCH_KEY, id);

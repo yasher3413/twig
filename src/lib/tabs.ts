@@ -164,6 +164,11 @@ export function clearSiteData(): Promise<void> {
   return invoke("clear_site_data");
 }
 
+/** How many tabs may stay awake at once. Rust clamps it to 2-12. */
+export function setHotCap(cap: number): Promise<number> {
+  return invoke("set_hot_cap", { cap });
+}
+
 export function setSearchEngine(template: string): Promise<void> {
   return invoke("set_search_engine", { template });
 }

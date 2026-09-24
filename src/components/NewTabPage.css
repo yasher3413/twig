@@ -43,6 +43,12 @@
   }
 }
 
+.newtab-greeting {
+  margin: -12px 0 22px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
 .newtab-search {
   width: 100%;
   display: flex;

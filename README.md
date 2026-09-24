@@ -118,7 +118,19 @@ no extension API, so there's no uBlock-shaped hole to fill. Content
 blocking, if it happens, would go through `WKContentRuleList`, which is
 a narrower thing than an extension store.
 
+## Getting started
+
+The first launch opens a short welcome: a name for new tabs to greet you
+by, bookmark import from Chrome, Arc, Brave, Edge or Vivaldi, a look,
+how many tabs stay awake, and your shortcuts. Every step is skippable,
+and it's replayable any time from Settings or `⌘K` → *Welcome to twig*.
+Nothing in it creates an account or leaves the Mac. (Safari isn't in the
+import list: its bookmarks need Full Disk Access.)
+
 ## Shortcuts
+
+These are the defaults. Every one can be rebound from Settings →
+Shortcuts or `⌘K` → *Customize keyboard shortcuts*.
 
 | | |
 |---|---|
