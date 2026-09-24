@@ -1269,12 +1269,30 @@ pub fn activate_tab<R: Runtime>(
     Ok(())
 }
 
+/// Offers a closed tab to reopen-closed-tab - unless it isn't really gone:
+/// a snoozed tab is coming back on its own, and reopening it too would
+/// bring it back twice.
+fn remember_closed(inner: &mut Inner, closed: TabEntry, remember: bool) {
+    if !remember || inner.is_private {
+        return;
+    }
+    inner.closed_stack.push(ClosedTab {
+        url: closed.url,
+        title: closed.title,
+        group_id: closed.group_id,
+    });
+    if inner.closed_stack.len() > CLOSED_STACK_CAP {
+        inner.closed_stack.remove(0);
+    }
+}
+
 #[tauri::command]
 pub fn close_tab<R: Runtime>(
     app: AppHandle<R>,
     window: Window<R>,
     manager: State<'_, TabManager>,
     id: String,
+    remember: Option<bool>,
 ) -> Result<(), String> {
     let mut managers = manager.0.lock().unwrap();
     let inner = inner_for(&mut managers, &window);
@@ -1291,16 +1309,7 @@ pub fn close_tab<R: Runtime>(
         webview.close().map_err(|e| e.to_string())?;
     }
     let closed = inner.tabs.remove(index);
-    if !inner.is_private {
-        inner.closed_stack.push(ClosedTab {
-            url: closed.url,
-            title: closed.title,
-            group_id: closed.group_id,
-        });
-        if inner.closed_stack.len() > CLOSED_STACK_CAP {
-            inner.closed_stack.remove(0);
-        }
-    }
+    remember_closed(inner, closed, remember.unwrap_or(true));
 
     let was_split = inner.group(&group_id).and_then(|g| g.split_id.as_deref()) == Some(id.as_str());
     let was_active = inner.group(&group_id).and_then(|g| g.active_id.as_deref()) == Some(id.as_str());
@@ -2439,6 +2448,19 @@ mod snooze_tests {
         )
         .unwrap();
         assert!(tab.last_used_ms.is_none());
+    }
+
+    #[test]
+    fn snoozed_tabs_skip_the_reopen_stack() {
+        let mut inner = super::Inner::default();
+        let tab = |url: &str| super::TabEntry {
+            id: "1".into(), url: url.into(), title: "T".into(), status: super::TabStatus::Hot,
+            last_active_at: std::time::Instant::now(), last_used_ms: 0, scroll_y: 0.0, group_id: "1".into(),
+        };
+        super::remember_closed(&mut inner, tab("https://closed.example/"), true);
+        super::remember_closed(&mut inner, tab("https://snoozed.example/"), false);
+        let urls: Vec<_> = inner.closed_stack.iter().map(|c| c.url.as_str()).collect();
+        assert_eq!(urls, ["https://closed.example/"]);
     }
 
     #[test]

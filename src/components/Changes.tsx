@@ -62,8 +62,8 @@ function ChangesPanel({ change, onClose }: { change: PageChange; onClose: () => 
       setOverlayActive(true, "changes").catch(() => {});
       return () => { setOverlayActive(false, "changes").catch(() => {}); };
     }
-    setContentInset(PANEL_WIDTH).catch(() => {});
-    return () => { setContentInset(0).catch(() => {}); };
+    setContentInset(PANEL_WIDTH, "changes").catch(() => {});
+    return () => { setContentInset(0, "changes").catch(() => {}); };
   }, [narrow]);
 
   useEffect(() => {

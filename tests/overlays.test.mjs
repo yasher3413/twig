@@ -81,3 +81,18 @@ test("an IPC failure is reported and does not strand subsequent updates", async 
   await setOverlayActive(true, "palette");
   assert.deepEqual(states, [false, true]);
 });
+
+test("a side panel handing over to another keeps the page narrowed", async () => {
+  const exports = {};
+  const insets = [];
+  runInNewContext(outputText, {
+    exports,
+    require() { return { invoke: async (command, args) => { assert.equal(command, "set_content_inset"); insets.push(args.right); } }; },
+  });
+  // The new panel mounts before the old one's cleanup runs.
+  await exports.setContentInset(380, "sweep");
+  await exports.setContentInset(0, "changes");
+  assert.equal(insets.at(-1), 380, "the old panel's release must not undo the new panel's claim");
+  await exports.setContentInset(0, "sweep");
+  assert.equal(insets.at(-1), 0);
+});

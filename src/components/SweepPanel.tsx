@@ -46,8 +46,8 @@ function Sweep() {
       setOverlayActive(true, "sweep").catch(() => {});
       return () => { setOverlayActive(false, "sweep").catch(() => {}); };
     }
-    setContentInset(PANEL_WIDTH).catch(() => {});
-    return () => { setContentInset(0).catch(() => {}); };
+    setContentInset(PANEL_WIDTH, "sweep").catch(() => {});
+    return () => { setContentInset(0, "sweep").catch(() => {}); };
   }, [narrow]);
 
   async function run(action: () => Promise<void>) {

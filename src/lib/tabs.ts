@@ -55,8 +55,9 @@ export function activateTab(id: string): Promise<void> {
   return invoke("activate_tab", { id });
 }
 
-export function closeTab(id: string): Promise<void> {
-  return invoke("close_tab", { id });
+/** `remember: false` keeps the tab out of reopen-closed-tab (a snooze). */
+export function closeTab(id: string, remember = true): Promise<void> {
+  return invoke("close_tab", { id, remember });
 }
 
 export function listTabs(): Promise<TabsChangedPayload> {
@@ -78,10 +79,19 @@ export function setContentOffset(offset: number): Promise<void> {
   return invoke("set_content_offset", { offset });
 }
 
+const insetClaims = new Map<string, number>();
+let insetUpdate: Promise<void> = Promise.resolve();
+
 /** Narrows the page from the right for a side panel read alongside it.
- *  Pass 0 to give the page its full width back. */
-export function setContentInset(right: number): Promise<void> {
-  return invoke("set_content_inset", { right });
+ *  Claims are per owner, like the overlay: a panel handing over to another
+ *  mounts the new one before the old one's cleanup releases, and that
+ *  release must not give the page its full width back. 0 releases. */
+export function setContentInset(right: number, owner: string): Promise<void> {
+  if (right > 0) insetClaims.set(owner, right);
+  else insetClaims.delete(owner);
+  const widest = Math.max(0, ...insetClaims.values());
+  insetUpdate = insetUpdate.catch(() => {}).then(() => invoke<void>("set_content_inset", { right: widest }));
+  return insetUpdate;
 }
 
 const overlayOwners = new Set<string>();

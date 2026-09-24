@@ -8,6 +8,9 @@ import { useSnoozeStore } from "../store/snooze";
 
 const MAX_FAILURES = 3;
 const failures = new Map<number, number>();
+/** Rows whose tab is already back (or already archived) but whose delete
+ *  failed. They're only ever deleted again, never reopened. */
+const settled = new Set<number>();
 
 function changed() {
   window.dispatchEvent(new Event("twig:snoozed-changed"));
@@ -29,7 +32,7 @@ export async function snoozeTab(tabId: string, wakeAt: number): Promise<void> {
   const space = s.groups.find((g) => g.id === tab.groupId);
   await addSnooze({ url: tab.url, title: tab.title, spaceId: tab.groupId, spaceName: space?.name ?? null, wakeAt });
   changed();
-  await closeTab(tabId);
+  await closeTab(tabId, false);
 }
 
 let waking: Promise<void> | null = null;
@@ -42,34 +45,55 @@ export function wakeDue(now = Date.now()): Promise<void> {
   return waking;
 }
 
+async function deleteOrSettle(id: number): Promise<void> {
+  try {
+    await deleteSnooze(id);
+    settled.delete(id);
+  } catch (cause) {
+    settled.add(id);
+    console.warn("Couldn't clear a snooze; it won't be reopened again", cause);
+  }
+}
+
 async function wakeDueOnce(now: number): Promise<void> {
   let touched = false;
   for (const row of await dueSnoozes(now)) {
+    if (settled.has(row.id)) {
+      await deleteOrSettle(row.id);
+      continue;
+    }
+    let tab;
     try {
-      const tab = await openBackgroundTab(row.url, row.title, row.spaceId);
-      await deleteSnooze(row.id);
-      failures.delete(row.id);
-      useSnoozeStore.getState().markWoken(tab.id);
-      touched = true;
+      tab = await openBackgroundTab(row.url, row.title, row.spaceId);
     } catch (cause) {
       const count = (failures.get(row.id) ?? 0) + 1;
       failures.set(row.id, count);
       console.warn("Couldn't bring back a snoozed tab", row.url, cause);
-      if (count >= MAX_FAILURES) {
-        // Give up on reopening, but never lose it: it's in Closed tabs now.
-        await archiveTab(row.url, row.title).catch(() => {});
-        await deleteSnooze(row.id).catch(() => {});
-        failures.delete(row.id);
-        touched = true;
+      if (count < MAX_FAILURES) continue;
+      // Give up on reopening - but only let go of the row once the tab is
+      // safely in Closed tabs. Until then it stays, and is tried again.
+      try {
+        await archiveTab(row.url, row.title);
+      } catch (archiveCause) {
+        console.warn("Couldn't archive a snoozed tab; keeping it", archiveCause);
+        continue;
       }
+      failures.delete(row.id);
+      await deleteOrSettle(row.id);
+      touched = true;
+      continue;
     }
+    failures.delete(row.id);
+    useSnoozeStore.getState().markWoken(tab.id);
+    await deleteOrSettle(row.id);
+    touched = true;
   }
   if (touched) changed();
 }
 
 export async function wakeNow(row: SnoozedTab): Promise<void> {
   const tab = await openBackgroundTab(row.url, row.title, row.spaceId);
-  await deleteSnooze(row.id);
+  await deleteOrSettle(row.id);
   changed();
   await useTabStore.getState().switchTo(tab.id);
 }
