@@ -18,6 +18,7 @@ import { useTabStore } from "./store/tabs";
 import { useSettingsStore } from "./store/settings";
 import { followLink, goBack, goForward, isNewTab, reloadTab, toggleReader, zoomTab } from "./lib/tabs";
 import { indexPage } from "./lib/db";
+import { checkForChange, watchChanges } from "./lib/change-watch";
 import "./App.css";
 
 function App() {
@@ -98,9 +99,15 @@ function App() {
       "page-captured",
       (event) => {
         if (useTabStore.getState().isPrivate) return;
-        indexPage(event.payload).catch((cause) => {
-          window.dispatchEvent(new CustomEvent("twig:recall-index-error", { detail: String(cause) }));
-        });
+        const capture = event.payload;
+        // Compare first: once indexed, this capture would be its own baseline.
+        checkForChange(capture)
+          .catch((cause) => console.warn("Change detection failed", cause))
+          .finally(() => {
+            indexPage(capture).catch((cause) => {
+              window.dispatchEvent(new CustomEvent("twig:recall-index-error", { detail: String(cause) }));
+            });
+          });
       },
     );
 
@@ -118,6 +125,8 @@ function App() {
       unlistenCapture.then((f) => f());
     };
   }, []);
+
+  useEffect(() => watchChanges(), []);
 
   return (
     <>
