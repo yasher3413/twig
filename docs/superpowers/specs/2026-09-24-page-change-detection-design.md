@@ -63,7 +63,7 @@ Rust capture ──page-captured {tab_id, url, body…}──▶ App.tsx
    1. Skip if the window is private, the host is muted, or the payload has no `tab_id`.
    2. Fetch `copies = copiesBefore(url, captured_at, 3)`; `copies[0]` is the baseline. If there's none, clear and stop. If it's under 10 minutes older than this capture, leave the tab's current change as it is (a reload) and stop.
    3. Run `diffCopies(baseline.body, body)`. If the result isn't meaningful, clear and stop.
-   4. Volatility uses this change's ratio plus the ratios between consecutive earlier copies. If `isVolatile`, clear and stop.
+   4. Volatility uses this change's ratio plus the ratios between consecutive earlier copies. If `isVolatile`, clear and stop. With fewer than 3 earlier copies there isn't enough history to tell, so a change touching more than 60% of paragraphs is treated as a feed and cleared. Word-level diffing is capped (5,000 characters, 30 ms per paragraph, 250 ms per page); past that, a paragraph shows as removed + added.
    5. Otherwise call `set(tab_id, …)`.
 
    Detection errors are swallowed and logged to the console. They must never block indexing. Then call `indexPage(payload)` exactly as today.

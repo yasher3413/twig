@@ -76,10 +76,10 @@ content exclusions apply to future captures.
 When a page you've read before loads again, twig compares its text with the most recent saved copy, from any space, before saving the new one. If paragraphs were added, removed or rewritten, a **Changed · date** chip appears in the address bar. Click it, or use ⌘K → "Show what changed", to see the differences in a panel beside the page. You can also compare against any older copy.
 
 The chip stays quiet when:
-- the only differences are relative times, counters or clock times ("3 hours ago", "1.2k views");
+- the only differences are relative times, counters, dates or clock times ("3 hours ago", "1.2k views", "12 min read", "Sep 12");
 - the saved copy is less than 10 minutes old, as with a reload;
 - one copy is under 30% the length of the other, which usually means a partial load;
-- the page has changed wholesale three visits running, as a feed does;
+- the page has changed wholesale three visits running, as a feed does, or more than 60% of it changed before twig has seen it three times;
 - you've muted the site from the panel.
 
 Muted sites are listed in **Settings → Data**. Nothing is fetched in the background: changes are noticed only when you open the page yourself.

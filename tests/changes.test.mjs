@@ -109,3 +109,34 @@ test("decide: a page that changes wholesale every visit is a feed", () => {
   ];
   assert.equal(api.decide({ url, body: page(4), capturedAt: now, copies, muted: [] }).action, "clear");
 });
+
+test("a huge rewritten paragraph is diffed without freezing", () => {
+  const words = (seed) => Array.from({ length: 7000 }, (_, i) => `w${(i * seed) % 9973}`).join(" ");
+  const a = words(7), b = words(13);
+  const started = performance.now();
+  const decision = api.decide({ url: "https://logs.example.com/raw", body: b, capturedAt: now, copies: [
+    { id: 3, body: a, capturedAt: now - DAY }, { id: 2, body: b, capturedAt: now - 2 * DAY }, { id: 1, body: a, capturedAt: now - 3 * DAY },
+  ], muted: [] });
+  assert.ok(performance.now() - started < 1500, `took ${Math.round(performance.now() - started)}ms`);
+  assert.ok(["set", "clear"].includes(decision.action));
+});
+
+test("common relative-time, counter and date wording is masked", () => {
+  const same = (a, b) => assert.equal(api.comparisonKey(a), api.comparisonKey(b), `${a} vs ${b}`);
+  same("updated an hour ago", "updated 3 hours ago");
+  same("a minute ago", "just now");
+  same("Views: 1,234", "Views: 1,300");
+  same("12 min read", "13 min read");
+  same("posted 3h · 5 comments", "posted 5h · 9 comments");
+  same("Last updated Sep 12, 2026", "Last updated Sep 13, 2026");
+  same("Updated 2026-09-12", "Updated 2026-09-14");
+  same("© 2025 Example", "© 2026 Example");
+  assert.notEqual(api.comparisonKey("Supports Node 18"), api.comparisonKey("Supports Node 20"));
+});
+
+test("a wholesale change with little history is treated as a feed, not flagged", () => {
+  const page = (n) => doc(`Story ${n}a headline`, `Story ${n}b headline`, `Story ${n}c headline`, `Story ${n}d headline`);
+  const unrelated = (n) => doc(`Alpha ${n} one`, `Bravo ${n} two`, `Charlie ${n} three`, `Delta ${n} four`);
+  assert.equal(api.decide({ url: "https://news.example.com/", body: unrelated(2), capturedAt: now,
+    copies: [{ id: 1, body: page(1), capturedAt: now - DAY }], muted: [] }).action, "clear");
+});
