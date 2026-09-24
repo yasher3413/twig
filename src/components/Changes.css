@@ -1,0 +1,44 @@
+.changes {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  width: 380px;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  animation: changes-in 220ms var(--ease);
+}
+.changes.narrow { width: 100%; border-left: 0; }
+@keyframes changes-in { from { transform: translateX(16px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .changes { animation: none; } }
+.changes :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.changes-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 18px 8px; }
+.changes h2 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.changes h2:focus { outline: none; }
+.changes-range { margin: 4px 0 0; color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.changes-icon { display: inline-flex; padding: 6px; border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); }
+.changes-icon:hover { background: var(--row-hover); color: var(--text); }
+.changes-counts { display: flex; gap: 10px; margin: 0; padding: 0 18px 12px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 550; font-variant-numeric: tabular-nums; }
+.changes-counts .added { color: var(--accent); }
+.changes-counts .removed, .changes-counts .edited { color: var(--text-muted); }
+.changes-body { flex: 1; min-height: 0; overflow: auto; padding: 12px 18px; scrollbar-color: var(--border-strong) transparent; }
+.change-passage { margin: 0 0 10px; padding: 6px 10px; border-left: 3px solid transparent; border-radius: 0 6px 6px 0; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.change-passage.added { border-left-color: var(--accent); background: var(--accent-tint); }
+.change-passage.removed { border-left-color: var(--border-strong); color: var(--text-muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--text-muted) 60%, transparent); }
+.change-passage.edited { border-left-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.change-passage.context { color: var(--text-muted); }
+.change-passage ins { background: color-mix(in srgb, var(--accent) 26%, var(--surface)); text-decoration: none; border-radius: 2px; }
+.change-passage del { color: var(--text-muted); }
+.change-gap { margin: 0 0 10px; color: var(--text-muted); font-size: 11.5px; }
+.changes-empty { color: var(--text-muted); font-size: 13px; }
+.changes-footer { display: flex; flex-direction: column; gap: 10px; padding: 12px 18px 16px; border-top: 1px solid var(--border); }
+.changes-compare { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+.changes-compare select { flex: 1; height: 30px; padding: 3px 6px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; }
+.changes-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.changes-button { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: 7px; background: transparent; color: var(--text); font: inherit; font-size: 12px; }
+.changes-button:hover { background: var(--row-hover); }
+.changes-button.quiet { border-color: transparent; color: var(--text-muted); }
+.changes .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

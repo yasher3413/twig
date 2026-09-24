@@ -216,3 +216,26 @@
   font-size: 11.5px;
   opacity: 0.8;
 }
+
+.change-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 24px;
+  margin-right: 4px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent-tint);
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 550;
+  white-space: nowrap;
+  cursor: default;
+  transition: background-color 160ms var(--ease);
+}
+.change-chip:hover { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
+.change-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.change-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }

@@ -11,6 +11,7 @@ import {
 import { Icon } from "./Icon";
 import { useTabStore } from "../store/tabs";
 import { recallCount } from "../lib/recall-db";
+import { useChangeStore } from "../store/changes";
 import { useMenuAction } from "../lib/menu";
 import { openWelcome } from "../lib/onboarding";
 import "./SettingsPanel.css";
@@ -28,6 +29,8 @@ function formatMb(kb: number): string {
 
 export function SettingsPanel() {
   const isPrivate = useTabStore((s) => s.isPrivate);
+  const muted = useChangeStore((s) => s.muted);
+  const unmute = useChangeStore((s) => s.unmute);
   const {
     panelOpen,
     togglePanel,
@@ -239,6 +242,17 @@ export function SettingsPanel() {
                 Clear history
               </button>
             </div>
+            {muted.map((host) => (
+              <div className="settings-row" key={host}>
+                <span className="settings-label">
+                  {host}
+                  <span className="settings-sub">Changes on this site aren&apos;t flagged</span>
+                </span>
+                <button className="settings-button" onClick={() => unmute(host)}>
+                  Flag again
+                </button>
+              </div>
+            ))}
             <div className="settings-row">
               <span className="settings-label">
                 Cookies and site data

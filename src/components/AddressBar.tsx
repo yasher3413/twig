@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useTabStore } from "../store/tabs";
 import { useSettingsStore } from "../store/settings";
+import { useChangeStore } from "../store/changes";
+import { shortDate } from "../lib/changes";
 import { goBack, goForward, isInternalUrl, reloadTab, setContentOffset } from "../lib/tabs";
 import {
   addBookmark,
@@ -74,6 +76,8 @@ export function AddressBar() {
   const activeTab = useTabStore(
     useShallow((s) => s.tabs.find((t) => t.id === s.activeId) ?? null),
   );
+  const change = useChangeStore((s) => (activeId ? s.byTab[activeId] : undefined));
+  const openChanges = useChangeStore((s) => s.open);
   const togglePanel = useSettingsStore((s) => s.togglePanel);
   const searchEngineId = useSettingsStore((s) => s.searchEngineId);
   // `typed` is what you actually entered; `draft` is what's on screen,
@@ -365,6 +369,16 @@ export function AddressBar() {
             }
           }}
         />
+        {change && !internal && !isPrivate && !editing && (
+          <button
+            className="change-chip"
+            title={`Changed since you read it on ${new Date(change.baselineAt).toLocaleString()}`}
+            onClick={() => activeId && openChanges(activeId)}
+          >
+            <span className="change-dot" aria-hidden="true" />
+            Changed · {shortDate(change.baselineAt, Date.now())}
+          </button>
+        )}
         {!internal && !isPrivate && (
           <button
             className={bookmarked ? "omnibox-star on" : "omnibox-star"}

@@ -18,6 +18,7 @@ import { useMenuAction } from "../lib/menu";
 import { openCheckpoints } from "../lib/checkpoints";
 import { openResearchPackages } from "../lib/research";
 import { openRecall } from "../lib/recall";
+import { useChangeStore } from "../store/changes";
 import { displayAccel, getKeymap, openWelcome } from "../lib/onboarding";
 import { Icon, type IconName } from "./Icon";
 import { SiteMark, hostOf } from "./SiteMark";
@@ -55,6 +56,7 @@ const COMMAND_MENU_IDS: Record<string, string> = {
   "cmd-strip": "toggle-tab-strip",
   "cmd-settings": "settings",
   "cmd-recall": "show-recall",
+  "cmd-changes": "show-changes",
   "cmd-save-checkpoint": "save-checkpoint",
   "cmd-checkpoints": "show-checkpoints",
   "cmd-research": "show-research-packages",
@@ -116,6 +118,7 @@ function Palette({ onClose }: { onClose: () => void }) {
         reopenClosed: s.reopenClosed,
       })),
     );
+  const hasChange = useChangeStore((s) => (activeId ? !!s.byTab[activeId] : false));
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -291,6 +294,9 @@ function Palette({ onClose }: { onClose: () => void }) {
         { key: "cmd-research", kind: "command", label: "Show research packages", icon: "package", shortcut: "⇧⌘P", run: () => void openResearchPackages() },
         { key: "cmd-package", kind: "command", label: "Package current space", icon: "package", shortcut: "⌥⌘P", run: () => void openResearchPackages("current") },
       );
+      if (activeId && hasChange) {
+        commands.unshift({ key: "cmd-changes", kind: "command", label: "Show what changed", icon: "recall", run: () => useChangeStore.getState().open(activeId) });
+      }
     }
     if (activeTab && !isInternalUrl(activeTab.url) && !isPrivate) {
       commands.push({
@@ -314,7 +320,7 @@ function Palette({ onClose }: { onClose: () => void }) {
 
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, tabs, activeId, activeTab, activeBookmarked, history, bookmarks, pages, isPrivate, keymap]);
+  }, [query, tabs, activeId, activeTab, activeBookmarked, history, bookmarks, pages, isPrivate, keymap, hasChange]);
 
   const flat = useMemo(() => sections.flatMap((s) => s.items), [sections]);
   const current = flat[Math.min(selected, flat.length - 1)];
