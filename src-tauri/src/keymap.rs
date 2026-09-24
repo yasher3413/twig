@@ -68,6 +68,7 @@ const ACTIONS: &[Action] = &[
 
     a("next-tab", "Next Tab", "Tab", "CmdOrCtrl+Shift+BracketRight", false),
     a("prev-tab", "Previous Tab", "Tab", "CmdOrCtrl+Shift+BracketLeft", false),
+    a("snooze-tab", "Snooze Tab…", "Tab", "CmdOrCtrl+Alt+S", true),
 ];
 
 /// id -> accelerator. An empty string means deliberately unbound.

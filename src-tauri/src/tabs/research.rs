@@ -611,6 +611,7 @@ fn append_package(inner: &mut Inner, package: &ResearchPackage) -> Result<String
             title: page.title.clone(),
             status: TabStatus::Hibernated,
             last_active_at: Instant::now(),
+            last_used_ms: super::wall_ms(),
             scroll_y: 0.0,
             group_id: group_id.clone(),
         });
@@ -917,6 +918,7 @@ mod tests {
             title: "Original".into(),
             status: TabStatus::Hot,
             last_active_at: Instant::now(),
+            last_used_ms: 0,
             scroll_y: 42.0,
             group_id: "1".into(),
         });

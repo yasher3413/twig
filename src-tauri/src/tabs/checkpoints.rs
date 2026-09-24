@@ -329,6 +329,7 @@ fn append_restored(
             scroll_y: tab.scroll_y,
             status: TabStatus::Hibernated,
             last_active_at: Instant::now(),
+            last_used_ms: super::wall_ms(),
             group_id: group_id.clone(),
         });
     }
@@ -445,6 +446,7 @@ mod tests {
                 status: TabStatus::Hibernated,
                 group_id: group.into(),
                 last_active_at: Instant::now(),
+                last_used_ms: 0,
             });
         }
         inner.active_group_mut().active_id = Some("4100".into());

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use tauri::{
@@ -323,6 +323,7 @@ pub struct TabInfo {
     pub title: String,
     pub status: TabStatus,
     pub group_id: String,
+    pub last_used_at: u64,
 }
 
 #[derive(Clone, Serialize)]
@@ -408,6 +409,8 @@ struct TabEntry {
     title: String,
     status: TabStatus,
     last_active_at: Instant,
+    /// Wall-clock ms this tab was last on screen, persisted for the sweep.
+    last_used_ms: u64,
     /// Scroll offset captured right before hibernating, restored on wake.
     scroll_y: f64,
     group_id: String,
@@ -421,6 +424,7 @@ impl TabEntry {
             title: self.title.clone(),
             status: self.status,
             group_id: self.group_id.clone(),
+            last_used_at: self.last_used_ms,
         }
     }
 }
@@ -599,6 +603,12 @@ fn top_offset<R: Runtime>(window: &Window<R>, tab_strip_visible: bool) -> f64 {
 
 /// The window area available for tab content: the full window width, minus
 /// the chrome band along the top.
+/// Wall-clock milliseconds. `Instant` can't survive a restart, and "untouched
+/// for three weeks" has to.
+pub(crate) fn wall_ms() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64
+}
+
 fn content_area<R: Runtime>(window: &Window<R>, tab_strip_visible: bool, content_inset: f64) -> tauri::Result<LogicalSize<f64>> {
     let scale = window.scale_factor()?;
     let logical = window.inner_size()?.to_logical::<f64>(scale);
@@ -973,6 +983,7 @@ fn wake<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, inner: &mut Inner, i
     }
     entry.status = TabStatus::Hot;
     entry.last_active_at = Instant::now();
+    entry.last_used_ms = wall_ms();
     Ok(())
 }
 
@@ -1119,6 +1130,7 @@ fn open_tab_with_script<R: Runtime>(
         title,
         status: TabStatus::Hot,
         last_active_at: Instant::now(),
+        last_used_ms: wall_ms(),
         scroll_y: 0.0,
         group_id,
     });
@@ -1152,6 +1164,50 @@ pub fn create_tab<R: Runtime>(
 
     sync_visible_webviews(&app, &window, inner);
     focus_active(&app, inner);
+    emit_tabs_changed(&app, window.label(), inner);
+    Ok(info)
+}
+
+/// The space a background tab should land in: the one it came from, if it
+/// still exists, otherwise whichever space you're in now.
+fn landing_group(groups: &[Group], requested: Option<&str>, active: &str) -> String {
+    requested
+        .filter(|id| groups.iter().any(|g| g.id == *id))
+        .unwrap_or(active)
+        .to_string()
+}
+
+/// Puts a page back in the strip without showing it: asleep, no webview,
+/// focus and the current space untouched. How snoozed tabs come home.
+#[tauri::command]
+pub fn open_background_tab<R: Runtime>(
+    app: AppHandle<R>,
+    window: Window<R>,
+    manager: State<'_, TabManager>,
+    url: String,
+    title: String,
+    group_id: Option<String>,
+) -> Result<TabInfo, String> {
+    let parsed: tauri::Url = url.parse().map_err(|e| format!("invalid url: {e}"))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("Only web pages can be reopened".into());
+    }
+    let mut managers = manager.0.lock().unwrap();
+    let inner = inner_for(&mut managers, &window);
+    let group_id = landing_group(&inner.groups, group_id.as_deref(), &inner.active_group_id);
+    let id = (NEXT_TAB_ID.fetch_add(1, Ordering::Relaxed) + 1).to_string();
+    let title = if title.trim().is_empty() { derive_title(&parsed) } else { title };
+    inner.tabs.push(TabEntry {
+        id: id.clone(),
+        url: parsed.to_string(),
+        title,
+        status: TabStatus::Hibernated,
+        last_active_at: Instant::now(),
+        last_used_ms: wall_ms(),
+        scroll_y: 0.0,
+        group_id,
+    });
+    let info = inner.tabs.last().map(TabEntry::to_info).expect("tab was just pushed");
     emit_tabs_changed(&app, window.label(), inner);
     Ok(info)
 }
@@ -1469,6 +1525,7 @@ pub fn navigate_tab<R: Runtime>(
     entry.scroll_y = 0.0;
     entry.status = TabStatus::Hot;
     entry.last_active_at = Instant::now();
+    entry.last_used_ms = wall_ms();
 
     let info = entry.to_info();
 
@@ -2125,6 +2182,10 @@ struct PersistedTab {
     title: String,
     scroll_y: f64,
     group_id: String,
+    /// Absent in sessions saved before the sweep existed; those tabs count
+    /// as used at restore, so nobody is told to archive their whole session.
+    #[serde(default)]
+    last_used_ms: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -2166,6 +2227,7 @@ fn save_session<R: Runtime>(app: &AppHandle<R>, inner: &Inner) {
                 title: t.title.clone(),
                 scroll_y: t.scroll_y,
                 group_id: t.group_id.clone(),
+                last_used_ms: Some(t.last_used_ms),
             })
             .collect(),
         groups: inner
@@ -2227,6 +2289,7 @@ pub fn restore_session<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) {
             title: t.title,
             status: TabStatus::Hibernated,
             last_active_at: Instant::now(),
+            last_used_ms: t.last_used_ms.unwrap_or_else(wall_ms),
             scroll_y: t.scroll_y,
             group_id: t.group_id,
         })
@@ -2359,4 +2422,30 @@ pub fn watch_idle_tabs<R: Runtime>(app: &AppHandle<R>) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod snooze_tests {
+    use super::{landing_group, Group, PersistedTab};
+
+    fn group(id: &str) -> Group {
+        Group { id: id.into(), name: id.into(), active_id: None, split_id: None, checkpoint_parent_id: None }
+    }
+
+    #[test]
+    fn sessions_saved_before_last_used_existed_still_load() {
+        let tab: PersistedTab = serde_json::from_str(
+            r#"{"id":"1","url":"https://a.example/","title":"A","scroll_y":0.0,"group_id":"1"}"#,
+        )
+        .unwrap();
+        assert!(tab.last_used_ms.is_none());
+    }
+
+    #[test]
+    fn woken_tabs_go_home_or_to_the_current_space() {
+        let groups = vec![group("1"), group("2")];
+        assert_eq!(landing_group(&groups, Some("2"), "1"), "2");
+        assert_eq!(landing_group(&groups, Some("gone"), "1"), "1");
+        assert_eq!(landing_group(&groups, None, "1"), "1");
+    }
 }

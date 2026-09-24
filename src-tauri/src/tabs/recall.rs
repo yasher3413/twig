@@ -189,6 +189,7 @@ mod tests {
             title: "Example".into(),
             status: TabStatus::Hot,
             last_active_at: Instant::now(),
+            last_used_ms: 0,
             scroll_y: 0.0,
             group_id: "other".into(),
         });

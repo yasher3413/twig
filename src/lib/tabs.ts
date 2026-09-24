@@ -45,6 +45,12 @@ export function createTab(url?: string): Promise<Tab> {
   return invoke("create_tab", { url });
 }
 
+/** Reopens a page asleep in `groupId` (or the current space if that's
+ *  gone) without switching to it. */
+export function openBackgroundTab(url: string, title: string, groupId: string | null): Promise<Tab> {
+  return invoke("open_background_tab", { url, title, groupId });
+}
+
 export function activateTab(id: string): Promise<void> {
   return invoke("activate_tab", { id });
 }
