@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTabStore } from "../store/tabs";
 import { setOverlayActive } from "../lib/tabs";
 import {
@@ -44,6 +44,8 @@ export function Library() {
   const [shelf, setShelf] = useState<Shelf>("bookmarks");
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
+  const [selected, setSelected] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useMenuAction(["show-bookmarks", "show-history"], (id) => {
     if (isPrivate && id === "show-history") return;
@@ -104,7 +106,23 @@ export function Library() {
     if (open) load();
   }, [open, load]);
 
+  useEffect(() => {
+    setSelected(0);
+  }, [shelf, query]);
+
+  useEffect(() => {
+    listRef.current
+      ?.querySelector<HTMLElement>(`[data-index="${selected}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [selected]);
+
   if (!open) return null;
+
+  function openRow(row: Row | undefined) {
+    if (!row) return;
+    newTab(row.url);
+    setOpen(false);
+  }
 
   async function forget(url: string) {
     if (isPrivate && shelf === "history") return;
@@ -154,7 +172,28 @@ export function Library() {
                     ? "Search closed tabs"
                     : "Search history"
               }
+              role="combobox"
+              aria-expanded="true"
+              aria-controls="library-list"
+              aria-activedescendant={rows[selected] ? `library-${rows[selected].key}` : undefined}
               onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                // Search was typeable but nothing could be opened without
+                // the mouse - an odd gap in a keyboard-first browser.
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setSelected((i) => Math.min(i + 1, rows.length - 1));
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setSelected((i) => Math.max(i - 1, 0));
+                } else if (e.key === "Enter") {
+                  e.preventDefault();
+                  openRow(rows[selected]);
+                } else if (e.key === "Backspace" && e.metaKey && rows[selected]) {
+                  e.preventDefault();
+                  forget(rows[selected].url);
+                }
+              }}
             />
           </div>
 
@@ -163,7 +202,7 @@ export function Library() {
           </button>
         </header>
 
-        <div className="library-list">
+        <div className="library-list" id="library-list" role="listbox" ref={listRef}>
           {rows.length === 0 && (
             <p className="library-empty">
               {query
@@ -176,14 +215,16 @@ export function Library() {
             </p>
           )}
 
-          {rows.map((row) => (
+          {rows.map((row, i) => (
             <div
               key={row.key}
-              className="library-row"
-              onClick={() => {
-                newTab(row.url);
-                setOpen(false);
-              }}
+              id={`library-${row.key}`}
+              data-index={i}
+              role="option"
+              aria-selected={i === selected}
+              className={i === selected ? "library-row active" : "library-row"}
+              onMouseMove={() => setSelected(i)}
+              onClick={() => openRow(row)}
             >
               <SiteMark url={row.url} size={20} />
               <span className="library-title">{row.title}</span>
@@ -191,7 +232,8 @@ export function Library() {
               {row.meta && <span className="library-meta">{row.meta}</span>}
               <button
                 className="library-forget"
-                title={shelf === "bookmarks" ? "Remove bookmark" : "Forget this page"}
+                title={shelf === "bookmarks" ? "Remove bookmark (⌘⌫)" : "Forget this page (⌘⌫)"}
+                aria-label={shelf === "bookmarks" ? "Remove bookmark" : "Forget this page"}
                 onClick={(e) => {
                   e.stopPropagation();
                   forget(row.url);

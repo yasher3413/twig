@@ -132,8 +132,8 @@
   transition: background-color 0.12s var(--ease);
 }
 
-.library-row:hover {
-  background: var(--row-hover);
+.library-row.active {
+  background: var(--accent-tint);
 }
 
 .library-title {
@@ -178,7 +178,7 @@
   cursor: default;
 }
 
-.library-row:hover .library-forget {
+.library-row.active .library-forget {
   display: inline-flex;
 }
 

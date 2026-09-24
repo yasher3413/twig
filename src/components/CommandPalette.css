@@ -1,81 +1,208 @@
+/* Same backdrop, surface and elevation as the library and settings - the
+   palette used to be the one panel still on its own raw rgba values. */
 .palette-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.25);
+  z-index: 1000;
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  padding-top: 14vh;
-  z-index: 1000;
+  padding-top: 13vh;
+  background: color-mix(in srgb, var(--strip) 62%, transparent);
+  animation: palette-fade 0.14s var(--ease);
+}
+
+@keyframes palette-fade {
+  from {
+    opacity: 0;
+  }
 }
 
 .palette {
-  width: 560px;
+  width: 620px;
   max-width: calc(100vw - 48px);
-  max-height: 60vh;
+  max-height: min(560px, 72vh);
   display: flex;
   flex-direction: column;
-  background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
   overflow: hidden;
+  animation: palette-in 0.18s var(--ease);
+}
+
+@keyframes palette-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.99);
+  }
+}
+
+.palette-field {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex-shrink: 0;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
 }
 
 .palette-input {
+  flex: 1;
+  min-width: 0;
+  height: 54px;
   border: none;
   outline: none;
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 15px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
+  font-size: 15.5px;
 }
 
 .palette-input::placeholder {
   color: var(--text-muted);
 }
 
-.palette-results {
-  list-style: none;
-  margin: 0;
-  padding: 6px;
+.palette-list {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 6px 8px;
 }
 
 .palette-empty {
-  padding: 10px 10px;
+  margin: 22px auto;
+  max-width: 44ch;
   color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: center;
 }
 
-.palette-item {
+/* Sentence case, not a tracked caps eyebrow: these name what kind of
+   thing each row is, which decides what Enter will do. */
+.palette-group {
+  padding: 12px 10px 5px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.palette-row {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition: background-color 0.1s ease;
+  align-items: center;
+  gap: 11px;
+  min-height: 38px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  cursor: default;
 }
 
-.palette-item.selected {
+.palette-row.active {
   background: var(--accent-tint);
 }
 
-.palette-item-label {
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.palette-lead {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  flex-shrink: 0;
+  color: var(--text-muted);
 }
 
-.palette-item-sublabel {
-  color: var(--text-muted);
-  font-size: 12px;
-  white-space: nowrap;
+.palette-row.active .palette-lead {
+  color: var(--accent);
+}
+
+.palette-lead .site-mark {
+  border-radius: 4px;
+}
+
+.palette-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.palette-label {
   overflow: hidden;
   text-overflow: ellipsis;
-  flex-shrink: 1;
-  min-width: 0;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 13.5px;
+}
+
+.palette-snippet {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* The matched words from the full-text index - the reason the row is
+   there, so they get to be seen rather than stripped. */
+.palette-snippet mark {
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.palette-detail {
+  flex-shrink: 0;
+  max-width: 36%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.palette-detail.current {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+kbd,
+.palette-kbd {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.palette-foot {
+  display: flex;
+  gap: 16px;
+  flex-shrink: 0;
+  padding: 9px 16px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.palette-foot span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.palette-foot kbd {
+  padding: 0 5px;
+  font-size: 10.5px;
 }
