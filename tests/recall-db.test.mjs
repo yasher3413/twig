@@ -217,3 +217,17 @@ test("an identical copy outside the dedup interval is retained with its new read
   await db.indexRecall(capture({ capturedAt: now }));
   assert.equal((await db.searchRecall({ query: "SQLite" })).length, 2);
 });
+
+test("copiesBefore returns earlier copies across spaces, newest first", async () => {
+  const db = setup();
+  await db.indexRecall(capture({ body: "First version.", capturedAt: now - 3 * 3_600_000, spaceId: "work" }));
+  await db.indexRecall(capture({ body: "Second version.", capturedAt: now - 2 * 3_600_000, spaceId: "home", spaceName: "Home" }));
+  await db.indexRecall(capture({ body: "Third version.", capturedAt: now - 3_600_000 }));
+  await db.indexRecall(capture({ url: "https://example.com/other", body: "Other page.", capturedAt: now - 3_600_000 }));
+  const copies = await db.copiesBefore("https://example.com/a", now - 3_600_000);
+  assert.deepEqual(copies.map((c) => c.body), ["Second version.", "First version."]);
+  assert.equal(copies[0].capturedAt, now - 2 * 3_600_000);
+  assert.equal(typeof copies[0].id, "number");
+  assert.equal((await db.copiesBefore("https://example.com/a", now, 1)).length, 1);
+  assert.deepEqual((await db.copiesOf("https://example.com/a")).map((c) => c.capturedAt), [now - 3_600_000, now - 2 * 3_600_000, now - 3 * 3_600_000]);
+});

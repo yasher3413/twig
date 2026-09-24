@@ -50,8 +50,7 @@ Rust capture ──page-captured {tab_id, url, body…}──▶ App.tsx
    - The diff uses the `diff` npm package (jsdiff): `diffArrays` for paragraphs and `diffWordsWithSpace` for edited pairs.
 
 2. **`src/lib/recall-db.ts`**: new reads that go through the existing `write` queue and `await writes`, so they can't interleave with an insert or a forget.
-   - `latestCopyBefore(url, before): {id, body, capturedAt} | null` returns the newest copy of the URL from any space with `captured_at < before`.
-   - `recentCopies(url, limit = 4)` returns bodies for the volatility check, newest first.
+   - `copiesBefore(url, before, limit = 3)` returns up to `limit` copies of the URL from any space with `captured_at < before`, newest first. The first is the baseline; the rest feed the volatility check.
    - `copiesOf(url)` returns `{id, capturedAt}[]` for the "Compare with…" menu, newest first.
    - `indexRecall` is unchanged.
 
@@ -62,9 +61,9 @@ Rust capture ──page-captured {tab_id, url, body…}──▶ App.tsx
 
 4. **Detection flow (`App.tsx` `page-captured` handler)**, run before `indexPage`:
    1. Skip if the window is private, the host is muted, or the payload has no `tab_id`.
-   2. Fetch `baseline = latestCopyBefore(url, captured_at)`. If there's none, or it's under 10 minutes older than this capture, clear the tab's change and stop.
+   2. Fetch `copies = copiesBefore(url, captured_at, 3)`; `copies[0]` is the baseline. If there's none, clear and stop. If it's under 10 minutes older than this capture, leave the tab's current change as it is (a reload) and stop.
    3. Run `diffCopies(baseline.body, body)`. If the result isn't meaningful, clear and stop.
-   4. Fetch `recentCopies` and compute consecutive ratios. If `isVolatile`, clear and stop.
+   4. Volatility uses this change's ratio plus the ratios between consecutive earlier copies. If `isVolatile`, clear and stop.
    5. Otherwise call `set(tab_id, …)`.
 
    Detection errors are swallowed and logged to the console. They must never block indexing. Then call `indexPage(payload)` exactly as today.
@@ -106,7 +105,7 @@ Rust capture ──page-captured {tab_id, url, body…}──▶ App.tsx
   - the volatility rule;
   - `hunks` context and gap counts;
   - `hostOf`.
-- **`tests/recall-db.test.mjs`** additions: `latestCopyBefore` ignores copies at or after `before` and spans spaces; `copiesOf` ordering.
+- **`tests/recall-db.test.mjs`** additions: `copiesBefore` ignores copies at or after `before` and spans spaces; `copiesOf` ordering.
 - **`tests/changes-browser.mjs`** (WebKit, mocked Tauri, like `welcome-browser.mjs`):
   - seed an old copy, emit a `page-captured` with changed text, then assert the chip appears;
   - open the panel and assert the passages and that `set_content_inset(380)` was invoked;

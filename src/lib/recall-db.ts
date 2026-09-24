@@ -1,4 +1,5 @@
 import Database from "@tauri-apps/plugin-sql";
+import type { StoredCopy } from "./changes";
 
 const db = Database.get("sqlite:twig.db");
 const MAX_COPIES = 2000;
@@ -140,6 +141,26 @@ export async function getRecallCopy(id: number): Promise<RecallCopy | null> {
     `SELECT ${columns}, c.body, substr(c.body, 1, 240) AS snippet FROM recall_captures c WHERE c.id = $1`, [id],
   );
   return rows[0] ?? null;
+}
+
+/** Saved copies of `url` from before `before`, newest first, in any space:
+ *  what you last read, wherever you read it. */
+export async function copiesBefore(url: string, before: number, limit = 3): Promise<StoredCopy[]> {
+  await writes;
+  return db.select<StoredCopy[]>(
+    `SELECT id, body, captured_at AS capturedAt FROM recall_captures
+     WHERE url = $1 AND captured_at < $2 ORDER BY captured_at DESC, id DESC LIMIT $3`,
+    [url, before, bounded(limit, 3, 50) || 1],
+  );
+}
+
+export async function copiesOf(url: string): Promise<{ id: number; capturedAt: number }[]> {
+  await writes;
+  return db.select<{ id: number; capturedAt: number }[]>(
+    `SELECT id, captured_at AS capturedAt FROM recall_captures
+     WHERE url = $1 ORDER BY captured_at DESC, id DESC LIMIT 200`,
+    [url],
+  );
 }
 
 export async function recallSpaces(): Promise<{ id: string; name: string }[]> {
