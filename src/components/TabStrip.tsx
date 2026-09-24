@@ -50,8 +50,8 @@ export function TabStrip() {
   if (!tabStripVisible) return null;
 
   return (
-    <div className="tab-strip" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
-      <div className="tab-track">
+    <div className="tab-strip" data-tauri-drag-region onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+      <div className="tab-track" data-tauri-drag-region>
         {ready && spaceTabs.length === 0 && (
           <span className="tab-empty">No tabs in this space</span>
         )}
@@ -131,6 +131,7 @@ export function TabStrip() {
 
         <div
           className={overIndex === spaceTabs.length ? "tab-tail drop-before" : "tab-tail"}
+          data-tauri-drag-region
           onDragOver={(e) => {
             e.preventDefault();
             e.stopPropagation();

@@ -5,6 +5,8 @@
   "windows": ["main", "private-*"],
   "permissions": [
     "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize",
     "opener:default",
     "sql:default",
     "sql:allow-execute"

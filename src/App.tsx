@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { onMenuAction } from "./lib/menu";
 import { TabStrip } from "./components/TabStrip";
 import { AddressBar } from "./components/AddressBar";
@@ -132,6 +133,18 @@ function App() {
 
   useEffect(() => watchChanges(), []);
   useEffect(() => startSnoozeClock(), []);
+  // The traffic lights float over the top row except in fullscreen, where
+  // macOS hides them - so the room left for them goes too.
+  useEffect(() => {
+    const win = getCurrentWindow();
+    const sync = () =>
+      win.isFullscreen()
+        .then((full) => document.documentElement.toggleAttribute("data-fullscreen", !!full))
+        .catch(() => {});
+    sync();
+    const unlisten = win.onResized(sync);
+    return () => { unlisten.then((stop) => stop()).catch(() => {}); };
+  }, []);
   useEffect(() => watchWoken(), []);
 
   return (

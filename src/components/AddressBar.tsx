@@ -273,8 +273,12 @@ export function AddressBar() {
   const secure = url.startsWith("https://");
 
   return (
-    <div className="address-bar" style={{ top: tabStripVisible ? 38 : 0 }}>
-      <span className="wordmark">
+    <div
+      className="address-bar"
+      data-tauri-drag-region={tabStripVisible ? undefined : true}
+      style={{ top: tabStripVisible ? 38 : 0, paddingLeft: tabStripVisible ? undefined : "calc(10px + var(--traffic-inset))" }}
+    >
+      <span className="wordmark" data-tauri-drag-region={tabStripVisible ? undefined : true}>
         twig
         {isPrivate && (
           <span className="private-badge" title="Private window">

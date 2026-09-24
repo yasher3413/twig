@@ -587,6 +587,11 @@ fn native_title_bar_height<R: Runtime>(window: &Window<R>) -> f64 {
     else {
         return 0.0;
     };
+    // Windows use an overlay title bar: the chrome runs to the top edge and
+    // the traffic lights float over the tab strip, so nothing is reserved.
+    if ns_window.styleMask().contains(objc2_app_kit::NSWindowStyleMask::FullSizeContentView) {
+        return 0.0;
+    }
     (ns_window.frame().size.height - ns_window.contentLayoutRect().size.height).max(0.0)
 }
 
@@ -601,13 +606,14 @@ fn top_offset<R: Runtime>(window: &Window<R>, tab_strip_visible: bool) -> f64 {
     native_title_bar_height(window) + chrome_height(tab_strip_visible)
 }
 
-/// The window area available for tab content: the full window width, minus
-/// the chrome band along the top.
 /// Wall-clock milliseconds. `Instant` can't survive a restart, and "untouched
 /// for three weeks" has to.
 pub(crate) fn wall_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64
 }
+
+/// The window area available for tab content: the full window width, minus
+/// the chrome band along the top.
 
 fn content_area<R: Runtime>(window: &Window<R>, tab_strip_visible: bool, content_inset: f64) -> tauri::Result<LogicalSize<f64>> {
     let scale = window.scale_factor()?;
@@ -1932,6 +1938,10 @@ pub fn open_private_window<R: Runtime>(app: AppHandle<R>, manager: State<'_, Tab
     let webview_window = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html".into()))
         .title("twig — Private")
         .inner_size(1200.0, 800.0)
+        .min_inner_size(720.0, 480.0)
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true)
+        .traffic_light_position(tauri::LogicalPosition::new(14.0, 24.0))
         .build()
         .map_err(|e| e.to_string())?;
     let window = AsRef::<Webview<R>>::as_ref(&webview_window).window();

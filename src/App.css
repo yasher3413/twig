@@ -10,6 +10,9 @@
 }
 
 :root {
+  /* Width the window's traffic lights take at the top-left; 0 in fullscreen,
+     where macOS hides them. */
+  --traffic-inset: 80px;
   /* Three stacked planes, not one flat fill: the strip sits furthest back,
      the toolbar and the active tab share --surface so the selected tab
      reads as physically continuous with the bar beneath it. */
@@ -166,4 +169,8 @@ textarea {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+:root[data-fullscreen] {
+  --traffic-inset: 0px;
 }

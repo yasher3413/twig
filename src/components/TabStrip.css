@@ -11,7 +11,8 @@
   display: flex;
   align-items: flex-end;
   gap: 4px;
-  padding: 0 8px;
+  /* Room for the window's traffic lights, which float over this row. */
+  padding: 0 8px 0 calc(8px + var(--traffic-inset));
   background: var(--strip);
   -webkit-user-select: none;
   user-select: none;
