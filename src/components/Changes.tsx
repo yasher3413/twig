@@ -7,6 +7,7 @@ import { openRecall } from "../lib/recall";
 import { setContentInset, setOverlayActive } from "../lib/tabs";
 import { useMenuAction } from "../lib/menu";
 import { Icon } from "./Icon";
+import { useSnoozeStore } from "../store/snooze";
 import "./Changes.css";
 
 const PANEL_WIDTH = 380;
@@ -40,6 +41,8 @@ function ChangesPanel({ change, onClose }: { change: PageChange; onClose: () => 
 
   useEffect(() => {
     const previous = document.activeElement;
+    // One side panel at a time.
+    useSnoozeStore.getState().closeSweep();
     headingRef.current?.focus();
     return () => {
       const chip = document.querySelector<HTMLElement>(".change-chip");

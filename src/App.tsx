@@ -14,6 +14,8 @@ import { Checkpoints } from "./components/Checkpoints";
 import { ResearchPackages } from "./components/ResearchPackages";
 import { Recall } from "./components/Recall";
 import { Changes } from "./components/Changes";
+import { SnoozePicker } from "./components/SnoozePicker";
+import { SweepPanel } from "./components/SweepPanel";
 import type { RecallCapture } from "./lib/recall-db";
 import { useTabStore } from "./store/tabs";
 import { useSettingsStore } from "./store/settings";
@@ -145,6 +147,8 @@ function App() {
       <ResearchPackages />
       <Recall />
       <Changes />
+      <SnoozePicker />
+      <SweepPanel />
       <CommandPalette />
       <SettingsPanel />
     </>

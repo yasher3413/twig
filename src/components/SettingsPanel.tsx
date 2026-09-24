@@ -12,6 +12,8 @@ import { Icon } from "./Icon";
 import { useTabStore } from "../store/tabs";
 import { recallCount } from "../lib/recall-db";
 import { useChangeStore } from "../store/changes";
+import { useSnoozeStore } from "../store/snooze";
+import { SWEEP_CHOICES, sweepChoiceLabel } from "../lib/sweep";
 import { useMenuAction } from "../lib/menu";
 import { openWelcome } from "../lib/onboarding";
 import "./SettingsPanel.css";
@@ -31,6 +33,8 @@ export function SettingsPanel() {
   const isPrivate = useTabStore((s) => s.isPrivate);
   const muted = useChangeStore((s) => s.muted);
   const unmute = useChangeStore((s) => s.unmute);
+  const sweepDays = useSnoozeStore((s) => s.sweepDays);
+  const setSweepDays = useSnoozeStore((s) => s.setSweepDays);
   const {
     panelOpen,
     togglePanel,
@@ -178,6 +182,16 @@ export function SettingsPanel() {
                     onClick={() => setHotCap(m.cap)}
                   >
                     {m.label} · {m.cap}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="settings-row">
+              <span className="settings-label">Suggest archiving tabs untouched for</span>
+              <div className="segmented">
+                {SWEEP_CHOICES.map((d) => (
+                  <button key={d} className={d === sweepDays ? "segment selected" : "segment"} aria-pressed={d === sweepDays} onClick={() => setSweepDays(d)}>
+                    {sweepChoiceLabel(d)}
                   </button>
                 ))}
               </div>

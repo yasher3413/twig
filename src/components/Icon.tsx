@@ -24,9 +24,11 @@ export type IconName =
   | "history"
   | "fork"
   | "package"
-  | "recall";
+  | "recall"
+  | "moon";
 
 const PATHS: Record<IconName, ReactNode> = {
+  moon: <path d="M12.8 10.4A5.2 5.2 0 0 1 5.6 3.2a5.2 5.2 0 1 0 7.2 7.2Z" />,
   recall: (
     <>
       <path d="M3 3.5h8v3M3 3.5v9h4M5 6h3M5 8.5h1" />

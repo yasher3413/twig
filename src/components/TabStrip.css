@@ -222,3 +222,8 @@
   background: var(--row-hover);
   color: var(--text);
 }
+
+.tab-woke { flex-shrink: 0; width: 6px; height: 6px; margin-left: -2px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
+.sweep-pill { flex-shrink: 0; align-self: center; height: 24px; margin-right: 6px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--accent-tint); color: var(--text); font: inherit; font-size: 11.5px; font-weight: 550; white-space: nowrap; cursor: default; transition: background-color 160ms var(--ease); }
+.sweep-pill:hover { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
+.sweep-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

@@ -15,15 +15,19 @@ import {
 import { Icon } from "./Icon";
 import { SiteMark, hostOf } from "./SiteMark";
 import { useMenuAction } from "../lib/menu";
+import { listSnoozes, type SnoozedTab } from "../lib/snooze-db";
+import { cancelSnooze, wakeNow } from "../lib/snooze-actions";
+import { wakeLabel } from "../lib/snooze";
 import "./Library.css";
 
-type Shelf = "bookmarks" | "history" | "archive";
+type Shelf = "bookmarks" | "history" | "archive" | "snoozed";
 
 interface Row {
   key: string;
   url: string;
   title: string;
   meta?: string;
+  snooze?: SnoozedTab;
 }
 
 function whenever(ms: number): string {
@@ -89,6 +93,14 @@ export function Library() {
           meta: whenever(c.closedAt),
         })),
       );
+    } else if (shelf === "snoozed") {
+      if (isPrivate) { setRows([]); return; }
+      const q = query.trim().toLowerCase();
+      const snoozed = (await listSnoozes()).filter((s) => !q || s.url.toLowerCase().includes(q) || s.title.toLowerCase().includes(q));
+      setRows(snoozed.map((s) => ({
+        key: `s-${s.id}`, url: s.url, title: s.title || hostOf(s.url),
+        meta: `Wakes ${wakeLabel(s.wakeAt, Date.now())}`, snooze: s,
+      })));
     } else {
       const entries: HistoryEntry[] = await searchHistory(query.trim(), 300);
       setRows(
@@ -107,6 +119,13 @@ export function Library() {
   }, [open, load]);
 
   useEffect(() => {
+    if (!open || shelf !== "snoozed") return;
+    const refresh = () => void load();
+    window.addEventListener("twig:snoozed-changed", refresh);
+    return () => window.removeEventListener("twig:snoozed-changed", refresh);
+  }, [open, shelf, load]);
+
+  useEffect(() => {
     setSelected(0);
   }, [shelf, query]);
 
@@ -120,13 +139,21 @@ export function Library() {
 
   function openRow(row: Row | undefined) {
     if (!row) return;
+    if (row.snooze) {
+      void wakeNow(row.snooze);
+      setOpen(false);
+      return;
+    }
     newTab(row.url);
     setOpen(false);
   }
 
   async function forget(url: string) {
     if (isPrivate && shelf === "history") return;
-    if (shelf === "bookmarks") await removeBookmark(url);
+    if (shelf === "snoozed") {
+      const row = rows.find((r) => r.url === url && r.snooze);
+      if (row?.snooze) await cancelSnooze(row.snooze);
+    } else if (shelf === "bookmarks") await removeBookmark(url);
     else if (shelf === "archive") await deleteArchiveUrl(url);
     else await deleteHistoryUrl(url);
     load();
@@ -157,6 +184,13 @@ export function Library() {
             >
               Closed
             </button>
+            <button
+              className={shelf === "snoozed" ? "segment selected" : "segment"}
+              disabled={isPrivate}
+              onClick={() => setShelf("snoozed")}
+            >
+              Snoozed
+            </button>
           </div>
 
           <div className="library-search">
@@ -166,7 +200,9 @@ export function Library() {
               value={query}
               spellCheck={false}
               placeholder={
-                shelf === "bookmarks"
+                shelf === "snoozed"
+                  ? "Search snoozed tabs"
+                  : shelf === "bookmarks"
                   ? "Search bookmarks"
                   : shelf === "archive"
                     ? "Search closed tabs"
@@ -207,7 +243,9 @@ export function Library() {
             <p className="library-empty">
               {query
                 ? `Nothing matching “${query}”.`
-                : shelf === "bookmarks"
+                : shelf === "snoozed"
+                  ? "Nothing snoozed. Snooze a tab from its moon button or ⌥⌘S."
+                  : shelf === "bookmarks"
                   ? "No bookmarks yet — ⌘D keeps the page you're on."
                   : shelf === "archive"
                     ? "Nothing closed yet. Tabs you close end up here."
@@ -232,8 +270,8 @@ export function Library() {
               {row.meta && <span className="library-meta">{row.meta}</span>}
               <button
                 className="library-forget"
-                title={shelf === "bookmarks" ? "Remove bookmark (⌘⌫)" : "Forget this page (⌘⌫)"}
-                aria-label={shelf === "bookmarks" ? "Remove bookmark" : "Forget this page"}
+                title={shelf === "snoozed" ? "Cancel snooze — it moves to Closed tabs" : shelf === "bookmarks" ? "Remove bookmark (⌘⌫)" : "Forget this page (⌘⌫)"}
+                aria-label={shelf === "snoozed" ? "Cancel snooze" : shelf === "bookmarks" ? "Remove bookmark" : "Forget this page"}
                 onClick={(e) => {
                   e.stopPropagation();
                   forget(row.url);

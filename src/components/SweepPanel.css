@@ -1,0 +1,25 @@
+.sweep { position: fixed; right: 0; bottom: 0; z-index: 900; display: flex; flex-direction: column; width: 380px; border-left: 1px solid var(--border); background: var(--surface); color: var(--text); animation: sweep-in 220ms var(--ease); }
+.sweep.narrow { width: 100%; border-left: 0; }
+@keyframes sweep-in { from { transform: translateX(16px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .sweep { animation: none; } }
+.sweep :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sweep-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 18px 12px; border-bottom: 1px solid var(--border); }
+.sweep h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.sweep h2:focus { outline: none; }
+.sweep-header p { margin: 4px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+.sweep-icon { display: inline-flex; padding: 6px; border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); }
+.sweep-icon:hover { background: var(--row-hover); color: var(--text); }
+.sweep-list { flex: 1; min-height: 0; overflow: auto; padding: 8px 10px; scrollbar-color: var(--border-strong) transparent; }
+.sweep-row { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 8px; }
+.sweep-row:hover { background: var(--row-hover); }
+.sweep-row input { accent-color: var(--accent); }
+.sweep-text { display: flex; flex-direction: column; min-width: 0; }
+.sweep-title { overflow: hidden; font-size: 13px; white-space: nowrap; text-overflow: ellipsis; }
+.sweep-meta { color: var(--text-muted); font-size: 11.5px; }
+.sweep-empty, .sweep-error { margin: 10px 18px; color: var(--text-muted); font-size: 13px; }
+.sweep-footer { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 18px 16px; border-top: 1px solid var(--border); }
+.sweep-button { min-height: 30px; padding: 6px 11px; border: 1px solid var(--border-strong); border-radius: 7px; background: transparent; color: var(--text); font: inherit; font-size: 12px; }
+.sweep-button:hover:not(:disabled) { background: var(--row-hover); }
+.sweep-button:disabled { opacity: 0.5; }
+.sweep-button.primary { border-color: color-mix(in srgb, var(--accent) 50%, transparent); background: var(--accent-tint); font-weight: 550; }
+.sweep-button.quiet { border-color: transparent; color: var(--text-muted); }

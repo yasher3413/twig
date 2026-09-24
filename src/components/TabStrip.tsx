@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTabStore } from "../store/tabs";
 import { Icon } from "./Icon";
+import { useSnoozeStore } from "../store/snooze";
+import { useStaleTabs } from "../lib/use-stale-tabs";
+import { shouldSuggest } from "../lib/sweep";
 import "./TabStrip.css";
 
 // The horizontal tab row. Sits in the top strip the backend reserves (see
@@ -20,7 +23,10 @@ export function TabStrip() {
     close,
     reorder,
     toggleSplit,
+    isPrivate,
   } = useTabStore();
+  const woken = useSnoozeStore((s) => s.woken);
+  const openPicker = useSnoozeStore((s) => s.openPicker);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
 
@@ -85,6 +91,7 @@ export function TabStrip() {
               className="tab-dot"
               title={tab.status === "hibernated" ? "Sleeping — click to wake" : undefined}
             />
+            {woken[tab.id] && <span className="tab-woke" title="Back from snooze" aria-label="Back from snooze" />}
             <span className="tab-title">{tab.title}</span>
             <button
               className="tab-action tab-split"
@@ -96,6 +103,19 @@ export function TabStrip() {
             >
               <Icon name="split" size={13} />
             </button>
+            {!isPrivate && /^https?:/.test(tab.url) && (
+              <button
+                className="tab-action tab-snooze"
+                title="Snooze (⌥⌘S)"
+                aria-label="Snooze tab"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openPicker(tab.id);
+                }}
+              >
+                <Icon name="moon" size={13} />
+              </button>
+            )}
             <button
               className="tab-action tab-close"
               title="Close tab"
@@ -119,9 +139,22 @@ export function TabStrip() {
         />
       </div>
 
+      <SweepPill />
       <button className="tab-new" title="New tab (⌘T)" onClick={() => newTab()}>
         <Icon name="plus" size={15} />
       </button>
     </div>
+  );
+}
+
+function SweepPill() {
+  const stale = useStaleTabs();
+  const dismissedUntil = useSnoozeStore((s) => s.dismissedUntil);
+  const openSweep = useSnoozeStore((s) => s.openSweep);
+  if (!shouldSuggest(stale, dismissedUntil, Date.now())) return null;
+  return (
+    <button className="sweep-pill" title="Review tabs you haven't touched" onClick={openSweep}>
+      {stale.length} untouched tabs
+    </button>
   );
 }

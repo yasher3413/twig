@@ -19,6 +19,10 @@ import { openCheckpoints } from "../lib/checkpoints";
 import { openResearchPackages } from "../lib/research";
 import { openRecall } from "../lib/recall";
 import { useChangeStore } from "../store/changes";
+import { useSnoozeStore } from "../store/snooze";
+import { canSnooze } from "../lib/snooze-actions";
+import { useStaleTabs } from "../lib/use-stale-tabs";
+import { shouldSuggest } from "../lib/sweep";
 import { displayAccel, getKeymap, openWelcome } from "../lib/onboarding";
 import { Icon, type IconName } from "./Icon";
 import { SiteMark, hostOf } from "./SiteMark";
@@ -57,6 +61,7 @@ const COMMAND_MENU_IDS: Record<string, string> = {
   "cmd-settings": "settings",
   "cmd-recall": "show-recall",
   "cmd-changes": "show-changes",
+  "cmd-snooze": "snooze-tab",
   "cmd-save-checkpoint": "save-checkpoint",
   "cmd-checkpoints": "show-checkpoints",
   "cmd-research": "show-research-packages",
@@ -119,6 +124,9 @@ function Palette({ onClose }: { onClose: () => void }) {
       })),
     );
   const hasChange = useChangeStore((s) => (activeId ? !!s.byTab[activeId] : false));
+  const stale = useStaleTabs();
+  const dismissedUntil = useSnoozeStore((s) => s.dismissedUntil);
+  const suggestSweep = shouldSuggest(stale, dismissedUntil, Date.now());
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -297,6 +305,12 @@ function Palette({ onClose }: { onClose: () => void }) {
       if (activeId && hasChange) {
         commands.unshift({ key: "cmd-changes", kind: "command", label: "Show what changed", icon: "recall", run: () => useChangeStore.getState().open(activeId) });
       }
+      if (activeId && canSnooze(activeId)) {
+        commands.push({ key: "cmd-snooze", kind: "command", label: "Snooze tab…", icon: "moon", shortcut: "⌥⌘S", run: () => useSnoozeStore.getState().openPicker(activeId) });
+      }
+      if (suggestSweep) {
+        commands.push({ key: "cmd-sweep", kind: "command", label: `Review ${stale.length} untouched tabs`, icon: "history", run: () => useSnoozeStore.getState().openSweep() });
+      }
     }
     if (activeTab && !isInternalUrl(activeTab.url) && !isPrivate) {
       commands.push({
@@ -320,7 +334,7 @@ function Palette({ onClose }: { onClose: () => void }) {
 
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, tabs, activeId, activeTab, activeBookmarked, history, bookmarks, pages, isPrivate, keymap, hasChange]);
+  }, [query, tabs, activeId, activeTab, activeBookmarked, history, bookmarks, pages, isPrivate, keymap, hasChange, suggestSweep, stale.length]);
 
   const flat = useMemo(() => sections.flatMap((s) => s.items), [sections]);
   const current = flat[Math.min(selected, flat.length - 1)];
