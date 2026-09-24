@@ -89,6 +89,7 @@ the exported file.
 - See pages captured in the same space and browsing session within 30 minutes
 - Open a fresh live tab with a best-effort jump to the matching passage
 - Delete a single copy, forget every copy of an address, or clear copies with history in Settings
+- **Changes since you last read:** revisit a page and a *Changed* chip shows what's different in its text since your last visit, in a panel beside the page
 
 Recall keeps up to 2,000 copies of 40,000 characters each. When full, new
 captures pause and existing copies stay available. Identical captures in
