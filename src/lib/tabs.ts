@@ -8,6 +8,8 @@ export interface Tab {
   title: string;
   status: TabStatus;
   groupId: string;
+  /** Wall-clock ms the tab was last on screen. Survives restarts. */
+  lastUsedAt: number;
 }
 
 export interface Group {
