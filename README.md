@@ -106,6 +106,7 @@ remain unknown. See [Recall's behavior and limits](docs/recall.md).
 - Downloads, saved to `~/Downloads` without clobbering existing files
 
 **The rest**
+- **Snooze and sweep:** snooze a tab until later (⌥⌘S), and archive tabs you haven't touched in weeks when twig suggests it ([details](docs/snooze.md))
 - Dark/light theme with a configurable accent
 - Pick your search engine (Google, DuckDuckGo, Brave, Bing)
 - Private windows — non-persistent store, nothing indexed or recorded
@@ -157,6 +158,7 @@ Shortcuts or `⌘K` → *Customize keyboard shortcuts*.
 | `⌥⌘P` | Package the current space |
 | `⇧⌘P` | Research package library and import |
 | `⇧⌘F` | Recall a passage |
+| `⌥⌘S` | Snooze tab |
 | `⌘,` | Settings |
 
 ## Stack

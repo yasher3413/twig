@@ -32,7 +32,17 @@ export async function snoozeTab(tabId: string, wakeAt: number): Promise<void> {
   await closeTab(tabId);
 }
 
-export async function wakeDue(now = Date.now()): Promise<void> {
+let waking: Promise<void> | null = null;
+
+/** Single-flight across the module: two clocks (StrictMode's double mount,
+ *  a hot reload) must never both read a due row before either deletes it,
+ *  or the tab comes back twice. */
+export function wakeDue(now = Date.now()): Promise<void> {
+  waking ??= wakeDueOnce(now).finally(() => { waking = null; });
+  return waking;
+}
+
+async function wakeDueOnce(now: number): Promise<void> {
   let touched = false;
   for (const row of await dueSnoozes(now)) {
     try {
