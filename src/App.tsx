@@ -20,6 +20,7 @@ import { useSettingsStore } from "./store/settings";
 import { followLink, goBack, goForward, isNewTab, reloadTab, toggleReader, zoomTab } from "./lib/tabs";
 import { indexPage } from "./lib/db";
 import { checkForChange, watchChanges } from "./lib/change-watch";
+import { startSnoozeClock, watchWoken } from "./lib/snooze-actions";
 import "./App.css";
 
 function App() {
@@ -128,6 +129,8 @@ function App() {
   }, []);
 
   useEffect(() => watchChanges(), []);
+  useEffect(() => startSnoozeClock(), []);
+  useEffect(() => watchWoken(), []);
 
   return (
     <>
