@@ -36,4 +36,5 @@ strip = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.4"
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSWindow", "NSResponder", "NSView"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "block2", "NSWindow", "NSResponder", "NSView", "NSWorkspace"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSBundle", "NSError", "NSString", "NSURL"] }

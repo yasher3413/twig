@@ -1206,6 +1206,57 @@ pub fn create_tab<R: Runtime>(
     Ok(info)
 }
 
+/// The web links among the addresses macOS hands twig when it's the
+/// default browser (or something is dropped on its icon). Anything else -
+/// mail links, files - isn't a page to open here.
+fn external_links(urls: &[tauri::Url]) -> Vec<String> {
+    urls.iter()
+        .filter(|u| matches!(u.scheme(), "http" | "https"))
+        .map(|u| u.to_string())
+        .collect()
+}
+
+/// The current space's active tab, if it's an untouched new tab page: a
+/// link from another app should land there rather than stacking an empty
+/// tab behind it.
+fn reusable_blank_tab(inner: &Inner) -> Option<String> {
+    let id = inner.active_group().active_id.clone()?;
+    inner.tabs.iter().find(|t| t.id == id && t.url.is_empty()).map(|t| t.id.clone())
+}
+
+/// Opens links other apps hand twig - a link clicked in Slack or Mail once
+/// twig is the default browser - as new tabs in the main window's current
+/// space, then brings that window to the front.
+pub fn open_external_urls<R: Runtime>(app: &AppHandle<R>, urls: &[tauri::Url]) {
+    let links = external_links(urls);
+    if links.is_empty() {
+        return;
+    }
+    let Some(window) = app.get_window(MAIN_WINDOW_LABEL) else {
+        return;
+    };
+    for (i, link) in links.into_iter().enumerate() {
+        // Decide under the lock, then release it: both commands take it.
+        let blank = if i == 0 {
+            let manager = app.state::<TabManager>();
+            let mut managers = manager.0.lock().unwrap();
+            reusable_blank_tab(inner_for(&mut managers, &window))
+        } else {
+            None
+        };
+        let opened = match blank {
+            Some(id) => navigate_tab(app.clone(), window.clone(), app.state(), id, link).map(|_| ()),
+            None => create_tab(app.clone(), window.clone(), app.state(), Some(link)).map(|_| ()),
+        };
+        if let Err(e) = opened {
+            eprintln!("couldn't open a link from another app: {e}");
+        }
+    }
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
 /// The space a background tab should land in: the one it came from, if it
 /// still exists, otherwise whichever space you're in now.
 fn landing_group(groups: &[Group], requested: Option<&str>, active: &str) -> String {
@@ -2520,6 +2571,28 @@ mod snooze_tests {
         assert_eq!(super::display_title("  Leafs \n –   Google   Search "), Some("Leafs – Google Search".into()));
         assert_eq!(super::display_title("   "), None);
         assert_eq!(super::display_title("x".repeat(400).as_str()).map(|t| t.chars().count()), Some(300));
+    }
+
+    #[test]
+    fn links_from_other_apps_open_only_if_they_are_web_pages() {
+        let urls: Vec<tauri::Url> = ["https://github.com/", "mailto:a@b.c", "http://x.example/p", "file:///etc/hosts"]
+            .iter().map(|u| u.parse().unwrap()).collect();
+        assert_eq!(super::external_links(&urls), ["https://github.com/", "http://x.example/p"]);
+    }
+
+    #[test]
+    fn a_link_reuses_an_empty_new_tab_instead_of_stacking_another() {
+        let mut inner = super::Inner::default();
+        let tab = |id: &str, url: &str| super::TabEntry {
+            id: id.into(), url: url.into(), title: "T".into(), status: super::TabStatus::Hot,
+            last_active_at: std::time::Instant::now(), last_used_ms: 0, scroll_y: 0.0, group_id: "1".into(),
+        };
+        inner.tabs.push(tab("1", "https://a.example/"));
+        inner.tabs.push(tab("2", ""));
+        inner.active_group_mut().active_id = Some("2".into());
+        assert_eq!(super::reusable_blank_tab(&inner), Some("2".to_string()));
+        inner.active_group_mut().active_id = Some("1".into());
+        assert_eq!(super::reusable_blank_tab(&inner), None);
     }
 
     #[test]

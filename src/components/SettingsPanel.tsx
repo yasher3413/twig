@@ -13,6 +13,7 @@ import { useTabStore } from "../store/tabs";
 import { recallCount } from "../lib/recall-db";
 import { useChangeStore } from "../store/changes";
 import { useSnoozeStore } from "../store/snooze";
+import { DefaultBrowserRow } from "./DefaultBrowserRow";
 import { SWEEP_CHOICES, sweepChoiceLabel } from "../lib/sweep";
 import { useMenuAction } from "../lib/menu";
 import { openWelcome } from "../lib/onboarding";
@@ -100,6 +101,11 @@ export function SettingsPanel() {
         </div>
 
         <div className="settings-body">
+          <section className="settings-group">
+            <h3>Browser</h3>
+            <DefaultBrowserRow />
+          </section>
+
           <section className="settings-group">
             <h3>Search</h3>
             <div className="settings-row">

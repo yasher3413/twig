@@ -1,3 +1,4 @@
+mod default_browser;
 mod import;
 mod keymap;
 mod tabs;
@@ -163,6 +164,8 @@ pub fn run() {
             tabs::set_content_offset,
             tabs::set_content_inset,
             tabs::open_background_tab,
+            default_browser::is_default_browser,
+            default_browser::make_default_browser,
             tabs::set_hot_cap,
             keymap::get_keymap,
             keymap::set_keymap,
@@ -184,6 +187,15 @@ pub fn run() {
             tabs::research::open_research_package,
             tabs::research::capture_research_excerpt,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // Links clicked in other apps once twig is the default browser.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = event {
+                tabs::open_external_urls(app, &urls);
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
 }

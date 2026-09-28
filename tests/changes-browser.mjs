@@ -72,6 +72,8 @@ await page.addInitScript((pageUrl) => {
         return null;
       }
       if (command === "get_keymap") return [];
+      if (command === "is_default_browser") return window.testIsDefault === true;
+      if (command === "make_default_browser") { window.testIsDefault = true; return null; }
       if (command === "memory_stats") return { footprintKb: 0, processCount: 0, awakeTabs: 0, sleepingTabs: 0, estimatedSavedKb: 0 };
       return null;
     },
@@ -181,6 +183,13 @@ try {
   await page.getByRole("button", { name: "Don't flag changes on docs.example.com" }).click();
   await chip.waitFor({ state: "detached" });
   assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem("twig:changes-muted"))), ["docs.example.com"]);
+
+  // Default browser: Settings offers it, and says so once macOS agrees.
+  await page.evaluate(() => window.fireEvent("menu-action", "settings"));
+  const makeDefault = page.getByRole("button", { name: "Make twig your default browser" });
+  await makeDefault.waitFor();
+  await makeDefault.click();
+  await page.getByText("twig is your default browser").waitFor();
 
   assert.deepEqual(errors, []);
   console.log("changes-browser: ok" + (capture ? ` — screenshots in ${shots}` : ""));
