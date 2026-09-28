@@ -685,8 +685,6 @@ fn spawn_webview_with_script<R: Runtime>(
     // Newly spawned tabs are re-placed by sync_visible_webviews, which applies the inset.
     let (position, size) = content_bounds(window, tab_strip_visible, content_offset, 0.0)?;
     let label = tab_label(id);
-    let app_handle = app.clone();
-    let nav_id = id.to_string();
     let title_app = app.clone();
     let title_id = id.to_string();
     // Matches whatever the OS reports (light/dark) so the brief placeholder
@@ -701,34 +699,6 @@ fn spawn_webview_with_script<R: Runtime>(
         .incognito(incognito)
         .user_agent(USER_AGENT)
         .background_color(backdrop)
-        .on_navigation(move |url| {
-            // Keeps our stored URL (and the address bar) in sync with
-            // real in-page navigation - link clicks, redirects, JS
-            // navigation - not just navigation we ourselves triggered.
-            let url = url.to_string();
-            let manager = app_handle.state::<TabManager>();
-            let mut managers = manager.0.lock().unwrap();
-            if let Some(label) = managers
-                .iter()
-                .find(|(_, inner)| inner.tabs.iter().any(|t| t.id == nav_id))
-                .map(|(label, _)| label.clone())
-            {
-                if let Some(inner) = managers.get_mut(&label) {
-                    if let Some(entry) = inner.tabs.iter_mut().find(|t| t.id == nav_id) {
-                        // A new page names itself once its <title> arrives;
-                        // until then, the host beats the previous page's title.
-                        if entry.url != url {
-                            if let Ok(parsed) = url.parse::<tauri::Url>() {
-                                entry.title = derive_title(&parsed);
-                            }
-                        }
-                        entry.url = url;
-                    }
-                    emit_tabs_changed(&app_handle, &label, inner);
-                }
-            }
-            true
-        })
         .on_document_title_changed(move |_webview, title| {
             // The page's own name for itself - "Leafs – Google Search",
             // "GitHub" - including titles single-page apps change later.
@@ -803,10 +773,29 @@ fn spawn_webview_with_script<R: Runtime>(
         let capture_id = id.to_string();
         let capture_window = window.label().to_string();
         builder = builder.on_page_load(move |webview, payload| {
+            let url = payload.url().to_string();
+            // Page loads are reported for the main page only - unlike
+            // navigation policy, which also fires for every iframe, ad and
+            // hidden frame, and once turned a Gmail tab into about:blank.
+            // So this is what the tab's address follows: link clicks,
+            // redirects and scripted navigation included.
+            {
+                let manager = hooked.state::<TabManager>();
+                let mut managers = manager.0.lock().unwrap();
+                if let Some(inner) = managers.get_mut(&capture_window) {
+                    let moved = inner
+                        .tabs
+                        .iter_mut()
+                        .find(|t| t.id == capture_id)
+                        .is_some_and(|entry| follow_page(entry, &url));
+                    if moved {
+                        emit_tabs_changed(&hooked, &capture_window, inner);
+                    }
+                }
+            }
             if payload.event() != PageLoadEvent::Finished {
                 return;
             }
-            let url = payload.url().to_string();
 
             // Zoom is remembered per site, so a page that needs it bigger
             // stays bigger every time you come back.
@@ -1587,6 +1576,20 @@ fn normalize_url(input: &str) -> String {
             .unwrap_or_else(|| DEFAULT_SEARCH_TEMPLATE.to_string());
         template.replace("{}", &query)
     }
+}
+
+/// Points a tab at the page it's now showing. Only real web pages take
+/// over a tab; a new address also resets the title to the host until the
+/// page names itself. Returns whether anything changed.
+fn follow_page(entry: &mut TabEntry, url: &str) -> bool {
+    if entry.url == url || !(url.starts_with("http://") || url.starts_with("https://")) {
+        return false;
+    }
+    entry.url = url.to_string();
+    if let Ok(parsed) = url.parse::<tauri::Url>() {
+        entry.title = derive_title(&parsed);
+    }
+    true
 }
 
 /// A page's `<title>` as a tab name: whitespace collapsed, capped, and
@@ -2593,6 +2596,21 @@ mod snooze_tests {
         assert_eq!(super::reusable_blank_tab(&inner), Some("2".to_string()));
         inner.active_group_mut().active_id = Some("1".into());
         assert_eq!(super::reusable_blank_tab(&inner), None);
+    }
+
+    #[test]
+    fn a_new_page_takes_over_the_tab_but_the_same_page_keeps_its_title() {
+        let mut entry = super::TabEntry {
+            id: "1".into(), url: "https://github.com/".into(), title: "GitHub".into(), status: super::TabStatus::Hot,
+            last_active_at: std::time::Instant::now(), last_used_ms: 0, scroll_y: 0.0, group_id: "1".into(),
+        };
+        assert!(!super::follow_page(&mut entry, "https://github.com/"));
+        assert_eq!(entry.title, "GitHub");
+        assert!(super::follow_page(&mut entry, "https://github.com/yasher3413/twig"));
+        assert_eq!(entry.url, "https://github.com/yasher3413/twig");
+        assert_eq!(entry.title, "github.com", "until the new page names itself");
+        assert!(!super::follow_page(&mut entry, "about:blank"), "frames and blank loads never take over a tab");
+        assert_eq!(entry.url, "https://github.com/yasher3413/twig");
     }
 
     #[test]
