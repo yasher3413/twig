@@ -19,6 +19,7 @@ import { SpaceSwitcher } from "./SpaceSwitcher";
 import { Icon } from "./Icon";
 import { useMenuAction } from "../lib/menu";
 import "./AddressBar.css";
+import { inlineCompletion } from "../lib/omnibox";
 import { openCheckpoints } from "../lib/checkpoints";
 import { openResearchPackages } from "../lib/research";
 import { openRecall } from "../lib/recall";
@@ -33,29 +34,6 @@ interface Suggestion {
 
 function looksLikeUrl(value: string): boolean {
   return value.includes("://") || (!value.includes(" ") && value.includes("."));
-}
-
-/// How a URL reads once the parts nobody types are stripped off, which is
-/// also the form worth completing to: "https://www.github.com/x" -> the
-/// "github.com/x" you'd actually have typed.
-function typeableForm(url: string): string {
-  return url.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
-}
-
-/// The shortest thing you've been to that starts with what you've typed,
-/// or null. Case-insensitive to match, but returns the stored spelling so
-/// the completion looks like the real URL.
-function inlineCompletion(typed: string, urls: string[]): string | null {
-  const probe = typed.toLowerCase();
-  if (!probe || probe.includes(" ")) return null;
-  let best: string | null = null;
-  for (const url of urls) {
-    const form = typeableForm(url);
-    if (form.toLowerCase().startsWith(probe) && form.length > typed.length) {
-      if (!best || form.length < best.length) best = form;
-    }
-  }
-  return best;
 }
 
 // Sits in the strip the backend reserves above tab content (see
@@ -95,6 +73,10 @@ export function AddressBar() {
   // otherwise put it straight back.
   const allowComplete = useRef(true);
   const pendingSelect = useRef<[number, number] | null>(null);
+  // Set when a click is what focused the field: that click's mouseup would
+  // otherwise collapse the select-all into a caret at the end, and typing
+  // would append to the old address instead of replacing it.
+  const selectAfterClick = useRef(false);
 
   const engineName =
     SEARCH_ENGINES.find((e) => e.id === searchEngineId)?.label ?? SEARCH_ENGINES[0].label;
@@ -330,6 +312,15 @@ export function AddressBar() {
           autoComplete="off"
           placeholder={activeTab ? "Search Google or enter address" : "Open a tab to get started"}
           disabled={!activeTab}
+          onMouseDown={(e) => {
+            selectAfterClick.current = document.activeElement !== e.currentTarget;
+          }}
+          onMouseUp={(e) => {
+            if (!selectAfterClick.current) return;
+            selectAfterClick.current = false;
+            e.preventDefault();
+            e.currentTarget.select();
+          }}
           onFocus={(e) => {
             setEditing(true);
             e.target.select();

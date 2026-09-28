@@ -18,7 +18,8 @@ import {
   type Tab,
   type TabsChangedPayload,
 } from "../lib/tabs";
-import { archiveTab, recordVisit } from "../lib/db";
+import { archiveTab, recordVisit, retitleVisit } from "../lib/db";
+import { visitChanges } from "../lib/visits";
 
 interface TabStore {
   tabs: Tab[];
@@ -46,6 +47,14 @@ interface TabStore {
 
 export const useTabStore = create<TabStore>((set, get) => {
   function applyPayload(payload: TabsChangedPayload) {
+    // History follows what tabs actually show - link clicks and redirects
+    // included - rather than only what was typed. Restoring a session at
+    // launch isn't browsing, so nothing is recorded until the store is ready.
+    if (get().ready && !payload.isPrivate) {
+      const { visits, retitles } = visitChanges(get().tabs, payload.tabs);
+      for (const v of visits) recordVisit(v.url, v.title).catch(() => {});
+      for (const v of retitles) retitleVisit(v.url, v.title).catch(() => {});
+    }
     set({
       tabs: payload.tabs,
       activeId: payload.activeId,
@@ -75,8 +84,7 @@ export const useTabStore = create<TabStore>((set, get) => {
       set({ ready: true });
     },
     async newTab(url) {
-      const tab = await createTab(url);
-      if (!get().isPrivate) await recordVisit(tab.url, tab.title);
+      await createTab(url);
     },
     async switchTo(id) {
       await activateTab(id);
@@ -92,8 +100,7 @@ export const useTabStore = create<TabStore>((set, get) => {
       await reorderTab(id, toIndex);
     },
     async navigate(id, url) {
-      const tab = await navigateTab(id, url);
-      if (!get().isPrivate) await recordVisit(tab.url, tab.title);
+      await navigateTab(id, url);
     },
     async toggleSplit(id) {
       await setSplit(get().splitId === id ? null : id);
@@ -111,8 +118,7 @@ export const useTabStore = create<TabStore>((set, get) => {
       await renameGroup(id, name);
     },
     async reopenClosed() {
-      const tab = await reopenClosedTab();
-      if (tab && !get().isPrivate) await recordVisit(tab.url, tab.title);
+      await reopenClosedTab();
     },
     async toggleTabStrip() {
       await toggleTabStripCommand();

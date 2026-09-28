@@ -87,7 +87,7 @@ async function shot(name) {
 // latest inset is meaningful.
 const lastInset = () => page.evaluate(() => window.calls.filter((c) => c.command === "set_content_inset").at(-1)?.args.right);
 async function eventually(check, what) {
-  for (let i = 0; i < 40; i++) { if (check()) return; await new Promise((r) => setTimeout(r, 50)); }
+  for (let i = 0; i < 40; i++) { if (await check()) return; await new Promise((r) => setTimeout(r, 50)); }
   assert.fail(`timed out waiting for ${what}`);
 }
 const captureNow = (body) => page.evaluate(({ pageUrl, body }) => window.fireEvent("page-captured", {
@@ -105,6 +105,20 @@ try {
   await icon.waitFor();
   assert.match(await icon.getAttribute("src"), /domain=docs\.example\.com/);
   assert.equal(await page.locator(".tab", { hasText: "Other" }).locator("img.site-mark").count(), 1);
+
+  // The address bar: the first click selects the whole address, so typing
+  // replaces it; autofill completes to a site, never an old search.
+  for (let i = 0; i < 5; i++) db.prepare("INSERT INTO history (url, title, visited_at) VALUES (?, ?, ?)").run("https://www.google.com/search?q=weather", "weather - Google Search", Date.now());
+  db.prepare("INSERT INTO history (url, title, visited_at) VALUES (?, ?, ?)").run("https://github.com/yasher3413/twig", "GitHub", Date.now());
+  const box = page.locator(".omnibox-input");
+  await box.click();
+  assert.deepEqual(await box.evaluate((el) => [el.selectionStart, el.selectionEnd]), [0, PAGE.length], "first click selects the address");
+  await box.pressSequentially("go", { delay: 40 });
+  await eventually(async () => (await box.inputValue()) === "google.com", "autofill to google.com");
+  await box.fill("");
+  await box.pressSequentially("gi", { delay: 40 });
+  await eventually(async () => (await box.inputValue()) === "github.com", "autofill to github.com");
+  await box.press("Escape");
 
   // Revisit with changed text: chip appears, and the capture is still indexed.
   await captureNow(newBody);

@@ -43,6 +43,16 @@ export async function recordVisit(url: string, title: string): Promise<void> {
   ]);
 }
 
+/** Pages name themselves after they load, so a visit recorded under its
+ *  address gets its real title once the page provides one. */
+export async function retitleVisit(url: string, title: string): Promise<void> {
+  if (!url || isInternalUrl(url) || !title) return;
+  await db.execute(
+    "UPDATE history SET title = $2 WHERE id = (SELECT MAX(id) FROM history WHERE url = $1)",
+    [url, title],
+  );
+}
+
 /** Most recently visited pages matching `query`, one row per URL. */
 export async function searchHistory(query: string, limit = 5): Promise<HistoryEntry[]> {
   const like = `%${query}%`;
