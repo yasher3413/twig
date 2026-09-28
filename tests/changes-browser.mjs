@@ -184,6 +184,18 @@ try {
   await chip.waitFor({ state: "detached" });
   assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem("twig:changes-muted"))), ["docs.example.com"]);
 
+  // New tab page: the three shortcuts sit together, not in a loose stack.
+  await page.evaluate(() => { window.testState.tabs.push({ id: "9", url: "", title: "New Tab", status: "hot", groupId: "1", lastUsedAt: Date.now() }); window.testState.activeId = "9"; window.fireEvent("tabs-changed", structuredClone(window.testState)); });
+  const shortcuts = page.locator(".newtab-checkpoints");
+  await shortcuts.first().waitFor();
+  const boxes = await shortcuts.evaluateAll((els) => els.map((el) => el.getBoundingClientRect()).map((r) => ({ top: Math.round(r.top), bottom: Math.round(r.bottom) })));
+  const rows = [...new Set(boxes.map((b) => b.top))].sort((a, b) => a - b);
+  for (let i = 1; i < rows.length; i++) {
+    const gap = rows[i] - boxes.find((b) => b.top === rows[i - 1]).bottom;
+    assert.ok(gap <= 12, `shortcut rows ${gap}px apart`);
+  }
+  await page.evaluate(() => { window.testState.tabs = window.testState.tabs.filter((t) => t.id !== "9"); window.testState.activeId = "1"; window.fireEvent("tabs-changed", structuredClone(window.testState)); });
+
   // Default browser: Settings offers it, and says so once macOS agrees.
   await page.evaluate(() => window.fireEvent("menu-action", "settings"));
   const makeDefault = page.getByRole("button", { name: "Make twig your default browser" });

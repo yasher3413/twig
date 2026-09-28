@@ -84,11 +84,13 @@ export function NewTabPage() {
           </p>
         ) : (
           <>
-            <button className="newtab-checkpoints" onClick={() => openRecall()}><Icon name="recall" size={15} /> Find something you read <span>⇧⌘F</span></button>
-            <button className="newtab-checkpoints" onClick={() => openCheckpoints()}>
-              <Icon name="history" size={15} /> Pick up from a checkpoint <span>⇧⌘H</span>
-            </button>
-            <button className="newtab-checkpoints" onClick={() => void openResearchPackages()}><Icon name="package" size={15} /> Open a research package <span>⇧⌘P</span></button>
+            <div className="newtab-shortcuts">
+              <button className="newtab-checkpoints" onClick={() => openRecall()}><Icon name="recall" size={15} /> Find something you read <span>⇧⌘F</span></button>
+              <button className="newtab-checkpoints" onClick={() => openCheckpoints()}>
+                <Icon name="history" size={15} /> Pick up from a checkpoint <span>⇧⌘H</span>
+              </button>
+              <button className="newtab-checkpoints" onClick={() => void openResearchPackages()}><Icon name="package" size={15} /> Open a research package <span>⇧⌘P</span></button>
+            </div>
             {sites.length > 0 && (
               <section className="newtab-section">
                 <h2>Most visited</h2>
