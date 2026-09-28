@@ -100,6 +100,12 @@ try {
   await page.goto(url);
   await page.locator(".address-bar").waitFor();
 
+  // Tabs carry their site's icon; a sleeping tab's icon is dimmed rather than hidden.
+  const icon = page.locator(".tab", { hasText: "Guide" }).locator("img.site-mark");
+  await icon.waitFor();
+  assert.match(await icon.getAttribute("src"), /domain=docs\.example\.com/);
+  assert.equal(await page.locator(".tab", { hasText: "Other" }).locator("img.site-mark").count(), 1);
+
   // Revisit with changed text: chip appears, and the capture is still indexed.
   await captureNow(newBody);
   await chip.waitFor();

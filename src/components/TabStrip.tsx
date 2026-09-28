@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTabStore } from "../store/tabs";
 import { Icon } from "./Icon";
+import { SiteMark, hostOf } from "./SiteMark";
 import { useSnoozeStore } from "../store/snooze";
 import { useStaleTabs } from "../lib/use-stale-tabs";
 import { shouldSuggest } from "../lib/sweep";
@@ -88,9 +89,16 @@ export function TabStrip() {
             }}
           >
             <span
-              className="tab-dot"
+              className="tab-icon"
               title={tab.status === "hibernated" ? "Sleeping — click to wake" : undefined}
-            />
+            >
+              {/^https?:/.test(tab.url) ? (
+                // Keyed by host so a failed icon doesn't stick to the next site.
+                <SiteMark key={hostOf(tab.url)} url={tab.url} size={14} />
+              ) : (
+                <span className="tab-dot" />
+              )}
+            </span>
             {woken[tab.id] && <span className="tab-woke" title="Back from snooze" aria-label="Back from snooze" />}
             <span className="tab-title">{tab.title}</span>
             <button

@@ -140,6 +140,31 @@
   background: var(--border-strong);
 }
 
+.tab-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+}
+
+.tab .site-mark {
+  border-radius: 3px;
+  transition: opacity 0.16s var(--ease), filter 0.16s var(--ease);
+}
+
+.tab .site-mark-letter {
+  font-size: 9px;
+  font-weight: 600;
+}
+
+/* Asleep: still recognisable, clearly not live. */
+.tab.hibernated .site-mark {
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+
 .tab.hibernated .tab-title {
   opacity: 0.55;
 }
