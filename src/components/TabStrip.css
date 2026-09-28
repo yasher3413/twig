@@ -82,21 +82,19 @@
   bottom: 0;
   width: 9px;
   height: 9px;
-  background: var(--surface);
+  pointer-events: none;
 }
 
+/* Each wing is the toolbar colour with a quarter circle cut from its top
+   outer corner, which leaves a concave curve flowing into the tab. */
 .tab.active::before {
   left: -9px;
-  border-bottom-right-radius: 9px;
-  box-shadow: 4px 0 0 0 var(--surface);
-  clip-path: inset(0 0 0 50%);
+  background: radial-gradient(circle at 0 0, transparent 8.5px, var(--surface) 9px);
 }
 
 .tab.active::after {
   right: -9px;
-  border-bottom-left-radius: 9px;
-  box-shadow: -4px 0 0 0 var(--surface);
-  clip-path: inset(0 50% 0 0);
+  background: radial-gradient(circle at 100% 0, transparent 8.5px, var(--surface) 9px);
 }
 
 .tab.split {
@@ -116,8 +114,6 @@
   width: 2px;
   border-radius: 1px;
   background: var(--accent);
-  clip-path: none;
-  box-shadow: none;
 }
 
 .tab-title {
