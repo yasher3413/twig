@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { emit } from "@tauri-apps/api/event";
 import { useShallow } from "zustand/react/shallow";
 import { useTabStore } from "../store/tabs";
@@ -99,7 +100,10 @@ export function CommandPalette() {
   // Triggered via a native menu accelerator, not a page-level keydown
   // listener: the active tab's webview usually holds keyboard focus,
   // which is a separate context our chrome's own listeners can't see.
-  useMenuAction(["command-palette"], () => setOpen((o) => !o));
+  // Rendered synchronously so the input exists - and has focus - before the
+  // next keystroke arrives: typing straight after ⌘K otherwise lost the
+  // first letter to whatever field had focus underneath.
+  useMenuAction(["command-palette"], () => flushSync(() => setOpen((o) => !o)));
 
   useEffect(() => {
     setOverlayActive(open, "palette");
@@ -141,7 +145,13 @@ function Palette({ onClose }: { onClose: () => void }) {
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? null;
 
+  useLayoutEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
   useEffect(() => {
+    // Again after the frame: the native side may move focus into the chrome
+    // webview as the overlay goes up.
     requestAnimationFrame(() => inputRef.current?.focus());
     getKeymap()
       .then((all) => setKeymapLabels(Object.fromEntries(all.map((b) => [b.id, displayAccel(b.current).join("")]))))

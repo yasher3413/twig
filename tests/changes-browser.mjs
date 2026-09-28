@@ -194,6 +194,14 @@ try {
     const gap = rows[i] - boxes.find((b) => b.top === rows[i - 1]).bottom;
     assert.ok(gap <= 12, `shortcut rows ${gap}px apart`);
   }
+  // ⌘K then typing straight away: every letter reaches the palette, none is
+  // left behind in the new tab's search box.
+  await page.locator(".newtab input").first().focus();
+  await page.evaluate(() => window.fireEvent("menu-action", "command-palette"));
+  await page.keyboard.type("git");
+  await eventually(async () => (await page.locator(".palette input").first().inputValue().catch(() => "")) === "git", "palette gets every letter");
+  assert.equal(await page.locator(".newtab input").first().inputValue(), "");
+  await page.keyboard.press("Escape");
   await page.evaluate(() => { window.testState.tabs = window.testState.tabs.filter((t) => t.id !== "9"); window.testState.activeId = "1"; window.fireEvent("tabs-changed", structuredClone(window.testState)); });
 
   // Default browser: Settings offers it, and says so once macOS agrees.
