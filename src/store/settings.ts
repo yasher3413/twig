@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { setHotCap as pushHotCap, setSearchEngine } from "../lib/tabs";
 
 export type ThemeMode = "system" | "light" | "dark";
@@ -90,6 +91,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     } else {
       root.dataset.theme = mode;
     }
+    // Pages decide light or dark from the window's appearance, not from our
+    // CSS - without this, twig in Dark still showed websites in Light.
+    getCurrentWindow().setTheme(mode === "system" ? null : mode).catch(() => {});
   }
 
   // URL building lives in Rust (normalize_url), so the choice has to be
