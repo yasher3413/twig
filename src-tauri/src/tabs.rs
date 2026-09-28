@@ -687,6 +687,8 @@ fn spawn_webview_with_script<R: Runtime>(
     let label = tab_label(id);
     let app_handle = app.clone();
     let nav_id = id.to_string();
+    let title_app = app.clone();
+    let title_id = id.to_string();
     // Matches whatever the OS reports (light/dark) so the brief placeholder
     // shown before a page's own background paints - visible on every fresh
     // webview, not just new tabs - reads as an intentional loading state
@@ -713,12 +715,42 @@ fn spawn_webview_with_script<R: Runtime>(
             {
                 if let Some(inner) = managers.get_mut(&label) {
                     if let Some(entry) = inner.tabs.iter_mut().find(|t| t.id == nav_id) {
+                        // A new page names itself once its <title> arrives;
+                        // until then, the host beats the previous page's title.
+                        if entry.url != url {
+                            if let Ok(parsed) = url.parse::<tauri::Url>() {
+                                entry.title = derive_title(&parsed);
+                            }
+                        }
                         entry.url = url;
                     }
                     emit_tabs_changed(&app_handle, &label, inner);
                 }
             }
             true
+        })
+        .on_document_title_changed(move |_webview, title| {
+            // The page's own name for itself - "Leafs – Google Search",
+            // "GitHub" - including titles single-page apps change later.
+            let Some(title) = display_title(&title) else { return };
+            let manager = title_app.state::<TabManager>();
+            let mut managers = manager.0.lock().unwrap();
+            let Some(label) = managers
+                .iter()
+                .find(|(_, inner)| inner.tabs.iter().any(|t| t.id == title_id))
+                .map(|(label, _)| label.clone())
+            else {
+                return;
+            };
+            if let Some(inner) = managers.get_mut(&label) {
+                if let Some(entry) = inner.tabs.iter_mut().find(|t| t.id == title_id) {
+                    if entry.title == title {
+                        return;
+                    }
+                    entry.title = title;
+                }
+                emit_tabs_changed(&title_app, &label, inner);
+            }
         });
     builder = builder.initialization_script(BUSY_TRACKER);
     builder = builder.initialization_script(LINK_HINTS);
@@ -1504,6 +1536,16 @@ fn normalize_url(input: &str) -> String {
             .unwrap_or_else(|| DEFAULT_SEARCH_TEMPLATE.to_string());
         template.replace("{}", &query)
     }
+}
+
+/// A page's `<title>` as a tab name: whitespace collapsed, capped, and
+/// nothing at all when the page didn't really name itself.
+fn display_title(raw: &str) -> Option<String> {
+    let title = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    if title.is_empty() {
+        return None;
+    }
+    Some(title.chars().take(300).collect())
 }
 
 fn derive_title(url: &tauri::Url) -> String {
@@ -2471,6 +2513,13 @@ mod snooze_tests {
         super::remember_closed(&mut inner, tab("https://snoozed.example/"), false);
         let urls: Vec<_> = inner.closed_stack.iter().map(|c| c.url.as_str()).collect();
         assert_eq!(urls, ["https://closed.example/"]);
+    }
+
+    #[test]
+    fn page_titles_are_tidied_before_they_name_a_tab() {
+        assert_eq!(super::display_title("  Leafs \n –   Google   Search "), Some("Leafs – Google Search".into()));
+        assert_eq!(super::display_title("   "), None);
+        assert_eq!(super::display_title("x".repeat(400).as_str()).map(|t| t.chars().count()), Some(300));
     }
 
     #[test]
