@@ -1,0 +1,5 @@
+[build]
+# Spotlight skips any folder whose name ends in ".noindex". Built app bundles
+# live under here, and indexed they showed up as a second "twig" in
+# Spotlight - and gave macOS a second copy to open links with.
+target-dir = "target.noindex"
