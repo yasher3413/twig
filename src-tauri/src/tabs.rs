@@ -57,8 +57,35 @@ const DEFAULT_TAB_TITLE: &str = "New Tab";
 /// app embedding a webview rather than a browser: Google serves its no-JS
 /// fallback page to it and refuses to let you sign in at all. We render
 /// with WebKit, so presenting as Safari is accurate rather than a spoof.
-const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
-    AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15";
+/// Sites decide what to serve - and some, like Gmail, whether to serve at
+/// all - from the Safari version they think they're talking to. twig runs
+/// on the Mac's own WebKit, so it claims the Safari that ships with that
+/// WebKit, read at launch, rather than a version frozen into the code
+/// (which is how Gmail came to call twig "no longer supported").
+static USER_AGENT: std::sync::LazyLock<String> =
+    std::sync::LazyLock::new(|| user_agent_for(installed_safari_version().as_deref()));
+
+fn user_agent_for(safari_version: Option<&str>) -> String {
+    let version = safari_version
+        .filter(|v| v.split('.').all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit())))
+        .unwrap_or("26.0");
+    format!(
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/{version} Safari/605.1.15"
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn installed_safari_version() -> Option<String> {
+    use objc2_foundation::{NSBundle, NSString};
+    let safari = NSBundle::bundleWithPath(&NSString::from_str("/Applications/Safari.app"))?;
+    let version = safari.objectForInfoDictionaryKey(&NSString::from_str("CFBundleShortVersionString"))?;
+    Some(version.downcast::<NSString>().ok()?.to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn installed_safari_version() -> Option<String> {
+    None
+}
 
 /// Injected into every tab so hibernation can ask "would tearing this down
 /// lose something?" before it does. A tab counts as busy if it has typing
@@ -697,7 +724,7 @@ fn spawn_webview_with_script<R: Runtime>(
     };
     let mut builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
         .incognito(incognito)
-        .user_agent(USER_AGENT)
+        .user_agent(&USER_AGENT)
         .background_color(backdrop)
         .on_document_title_changed(move |_webview, title| {
             // The page's own name for itself - "Leafs – Google Search",
@@ -2611,6 +2638,23 @@ mod snooze_tests {
         assert_eq!(entry.title, "github.com", "until the new page names itself");
         assert!(!super::follow_page(&mut entry, "about:blank"), "frames and blank loads never take over a tab");
         assert_eq!(entry.url, "https://github.com/yasher3413/twig");
+    }
+
+    #[test]
+    fn twig_presents_as_the_safari_this_mac_actually_has() {
+        assert_eq!(
+            super::user_agent_for(Some("26.2")),
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15"
+        );
+        assert!(super::user_agent_for(None).contains("Version/26.0 "), "fallback is a current version, not a stale one");
+        assert!(super::user_agent_for(Some("not a version")).contains("Version/26.0 "));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_installed_safari_version_is_actually_read() {
+        let version = super::installed_safari_version().expect("Safari's Info.plist should be readable");
+        assert!(version.chars().next().is_some_and(|c| c.is_ascii_digit()), "got {version:?}");
     }
 
     #[test]
