@@ -2,5 +2,9 @@
   "name": "twig-bug-relay",
   "private": true,
   "type": "module",
-  "description": "Files bug reports from twig's Report a Bug form as GitHub issues."
+  "description": "Files bug reports from twig's Report a Bug form as GitHub issues.",
+  "devDependencies": {
+    "@types/node": "^24.19.0",
+    "typescript": "^5.9.3"
+  }
 }
