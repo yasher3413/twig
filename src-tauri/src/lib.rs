@@ -1,3 +1,4 @@
+mod about;
 mod default_browser;
 mod import;
 mod keymap;
@@ -165,6 +166,7 @@ pub fn run() {
             tabs::set_content_inset,
             tabs::open_background_tab,
             default_browser::is_default_browser,
+            about::system_info,
             default_browser::make_default_browser,
             tabs::set_hot_cap,
             keymap::get_keymap,

@@ -69,6 +69,8 @@ const ACTIONS: &[Action] = &[
     a("next-tab", "Next Tab", "Tab", "CmdOrCtrl+Shift+BracketRight", false),
     a("prev-tab", "Previous Tab", "Tab", "CmdOrCtrl+Shift+BracketLeft", false),
     a("snooze-tab", "Snooze Tab…", "Tab", "CmdOrCtrl+Alt+S", true),
+
+    a("report-bug", "Report a Bug…", "Help", "", false),
 ];
 
 /// id -> accelerator. An empty string means deliberately unbound.
@@ -169,10 +171,11 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     }
 
     let window_menu = SubmenuBuilder::new(app, "Window").minimize().maximize().build()?;
+    let help_menu = submenu("Help", SubmenuBuilder::new(app, "Help"))?.build()?;
 
     Menu::with_items(
         app,
-        &[&app_menu, &file_menu, &edit_menu, &view_menu, &history_menu, &tab_menu.build()?, &window_menu],
+        &[&app_menu, &file_menu, &edit_menu, &view_menu, &history_menu, &tab_menu.build()?, &window_menu, &help_menu],
     )
 }
 

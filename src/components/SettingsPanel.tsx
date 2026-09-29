@@ -15,7 +15,7 @@ import { useChangeStore } from "../store/changes";
 import { useSnoozeStore } from "../store/snooze";
 import { DefaultBrowserRow } from "./DefaultBrowserRow";
 import { SWEEP_CHOICES, sweepChoiceLabel } from "../lib/sweep";
-import { useMenuAction } from "../lib/menu";
+import { dispatchMenuAction, useMenuAction } from "../lib/menu";
 import { openWelcome } from "../lib/onboarding";
 import "./SettingsPanel.css";
 
@@ -104,6 +104,15 @@ export function SettingsPanel() {
           <section className="settings-group">
             <h3>Browser</h3>
             <DefaultBrowserRow />
+            <div className="settings-row">
+              <span className="settings-label">
+                Something broken?
+                <span className="settings-sub">Tell us and it becomes a GitHub issue</span>
+              </span>
+              <button className="settings-button" onClick={() => { closePanel(); dispatchMenuAction("report-bug"); }}>
+                Report a bug…
+              </button>
+            </div>
           </section>
 
           <section className="settings-group">

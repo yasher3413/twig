@@ -15,7 +15,7 @@ import {
   type HistoryEntry,
   type PageMatch,
 } from "../lib/db";
-import { useMenuAction } from "../lib/menu";
+import { dispatchMenuAction, useMenuAction } from "../lib/menu";
 import { openCheckpoints } from "../lib/checkpoints";
 import { openResearchPackages } from "../lib/research";
 import { openRecall } from "../lib/recall";
@@ -294,6 +294,7 @@ function Palette({ onClose }: { onClose: () => void }) {
       { key: "cmd-settings", kind: "command", label: "Settings", icon: "settings", shortcut: "⌘,", run: () => emit("menu-action", "settings") },
       { key: "cmd-shortcuts", kind: "command", label: "Customize keyboard shortcuts", icon: "settings", run: () => openWelcome("keys") },
       { key: "cmd-welcome", kind: "command", label: "Welcome to twig", icon: "star", run: () => openWelcome() },
+      { key: "cmd-report-bug", kind: "command", label: "Report a bug", icon: "search", run: () => dispatchMenuAction("report-bug") },
     ];
     if (!isPrivate) {
       if (q) {

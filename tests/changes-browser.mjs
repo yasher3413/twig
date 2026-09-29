@@ -73,6 +73,8 @@ await page.addInitScript((pageUrl) => {
       }
       if (command === "get_keymap") return [];
       if (command === "is_default_browser") return window.testIsDefault === true;
+      if (command === "system_info") return { macos: "26.2", chip: "Apple M3" };
+      if (command === "plugin:app|version") return "0.1.1";
       if (command === "make_default_browser") { window.testIsDefault = true; return null; }
       if (command === "memory_stats") return { footprintKb: 0, processCount: 0, awakeTabs: 0, sleepingTabs: 0, estimatedSavedKb: 0 };
       return null;
@@ -215,6 +217,35 @@ try {
   await makeDefault.waitFor();
   await makeDefault.click();
   await page.getByText("twig is your default browser").waitFor();
+
+  // Report a bug: a native form that files the issue through the relay.
+  await page.keyboard.press("Escape");
+  const sent = [];
+  let relayUp = true;
+  await page.route("https://twig-bug-reports.vercel.app/api/report", async (route) => {
+    if (!relayUp) return route.abort();
+    sent.push(JSON.parse(route.request().postData()));
+    await route.fulfill({ status: 201, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({ number: 12, url: "https://github.com/yasher3413/twig/issues/12" }) });
+  });
+  await page.evaluate(() => window.fireEvent("menu-action", "report-bug"));
+  const form = page.getByRole("dialog", { name: "Report a bug" });
+  await form.waitFor();
+  await form.getByLabel("What happened?").fill("Tabs vanished after a restart");
+  await form.getByRole("button", { name: "Send report" }).click();
+  await form.getByText("Filed as #12").waitFor();
+  assert.deepEqual(sent[0], { happened: "Tabs vanished after a restart", expected: null, contact: null,
+    diagnostics: { version: "0.1.1", macos: "26.2", chip: "Apple M3" }, website: "" });
+  await page.keyboard.press("Escape");
+  await form.waitFor({ state: "detached" });
+
+  relayUp = false;
+  await page.evaluate(() => window.fireEvent("menu-action", "report-bug"));
+  await form.getByLabel("What happened?").fill("Offline report");
+  await form.getByRole("button", { name: "Send report" }).click();
+  await form.getByRole("button", { name: "Open on GitHub instead" }).click();
+  await eventually(async () => (await page.evaluate(() => window.calls.filter((c) => c.command === "create_tab").map((c) => c.args.url)))
+    .some((u) => u && u.startsWith("https://github.com/yasher3413/twig/issues/new?")), "prefilled GitHub issue opened");
 
   assert.deepEqual(errors, []);
   console.log("changes-browser: ok" + (capture ? ` — screenshots in ${shots}` : ""));

@@ -17,6 +17,7 @@ import { Recall } from "./components/Recall";
 import { Changes } from "./components/Changes";
 import { SnoozePicker } from "./components/SnoozePicker";
 import { SweepPanel } from "./components/SweepPanel";
+import { ReportBug } from "./components/ReportBug";
 import type { RecallCapture } from "./lib/recall-db";
 import { useTabStore } from "./store/tabs";
 import { useSettingsStore } from "./store/settings";
@@ -162,6 +163,7 @@ function App() {
       <Changes />
       <SnoozePicker />
       <SweepPanel />
+      <ReportBug />
       <CommandPalette />
       <SettingsPanel />
     </>
