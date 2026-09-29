@@ -22,7 +22,8 @@ export function OPTIONS(): Response {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const token = process.env.GITHUB_TOKEN;
+  // Pasted secrets often carry a stray newline or space; GitHub rejects those.
+  const token = process.env.GITHUB_TOKEN?.trim();
   if (!token) return reply(503, { error: "Bug reports aren't set up yet." });
 
   const sender = (request.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
