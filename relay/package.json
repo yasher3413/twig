@@ -1,0 +1,6 @@
+{
+  "name": "twig-bug-relay",
+  "private": true,
+  "type": "module",
+  "description": "Files bug reports from twig's Report a Bug form as GitHub issues."
+}
