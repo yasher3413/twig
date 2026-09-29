@@ -72,7 +72,10 @@ export function AddressBar() {
   // Deleting shouldn't re-complete: backspacing over a completion would
   // otherwise put it straight back.
   const allowComplete = useRef(true);
-  const pendingSelect = useRef<[number, number] | null>(null);
+  // The highlight to apply once `value` is what the field shows. Tied to the
+  // text so it can't be spent early on a render that doesn't show it yet -
+  // which is how the highlight used to vanish from the second letter on.
+  const pendingSelect = useRef<{ value: string; start: number; end: number } | null>(null);
   // Set when a click is what focused the field: that click's mouseup would
   // otherwise collapse the select-all into a caret at the end, and typing
   // would append to the old address instead of replacing it.
@@ -203,18 +206,20 @@ export function AddressBar() {
       .map((s) => s.target);
     const completed = inlineCompletion(typed, pool);
     if (completed) {
-      setDraft(typed + completed.slice(typed.length));
-      pendingSelect.current = [typed.length, completed.length];
+      const value = typed + completed.slice(typed.length);
+      setDraft(value);
+      pendingSelect.current = { value, start: typed.length, end: completed.length };
     } else {
       setDraft(typed);
     }
   }, [typed, suggestions, editing]);
 
   useEffect(() => {
-    const range = pendingSelect.current;
-    if (!range || !inputRef.current) return;
+    const pending = pendingSelect.current;
+    const input = inputRef.current;
+    if (!pending || !input || input.value !== pending.value) return;
     pendingSelect.current = null;
-    inputRef.current.setSelectionRange(range[0], range[1]);
+    input.setSelectionRange(pending.start, pending.end);
   }, [draft]);
 
   // Tab content is a separate native webview stacked above the chrome, so

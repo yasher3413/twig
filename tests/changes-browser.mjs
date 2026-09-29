@@ -115,8 +115,13 @@ try {
   const box = page.locator(".omnibox-input");
   await box.click();
   assert.deepEqual(await box.evaluate((el) => [el.selectionStart, el.selectionEnd]), [0, PAGE.length], "first click selects the address");
-  await box.pressSequentially("go", { delay: 40 });
-  await eventually(async () => (await box.inputValue()) === "google.com", "autofill to google.com");
+  // Like Chrome: what you typed, then the rest highlighted, after every key -
+  // so the next letter replaces the highlight instead of landing after it.
+  const shown = () => box.evaluate((el) => [el.value, el.selectionStart, el.selectionEnd]);
+  for (const [i, ch] of [..."goo"].entries()) {
+    await box.press(ch);
+    await eventually(async () => JSON.stringify(await shown()) === JSON.stringify(["google.com", i + 1, 10]), `"${"goo".slice(0, i + 1)}" + highlighted rest`);
+  }
   await box.fill("");
   await box.pressSequentially("gi", { delay: 40 });
   await eventually(async () => (await box.inputValue()) === "github.com", "autofill to github.com");
