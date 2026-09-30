@@ -235,7 +235,27 @@ try {
   await form.getByRole("button", { name: "Send report" }).click();
   await form.getByText("Filed as #12").waitFor();
   assert.deepEqual(sent[0], { happened: "Tabs vanished after a restart", expected: null, contact: null,
-    diagnostics: { version: "0.1.1", macos: "26.2", chip: "Apple M3" }, website: "" });
+    diagnostics: { version: "0.1.1", macos: "26.2", chip: "Apple M3" }, website: "", screenshot: null });
+  await page.keyboard.press("Escape");
+  await form.waitFor({ state: "detached" });
+
+  // With a screenshot: attach, preview, remove, attach again, send.
+  await page.evaluate(() => window.fireEvent("menu-action", "report-bug"));
+  await form.getByLabel("What happened?").fill("Layout breaks");
+  const picker = form.locator('input[type="file"]');
+  const iconFile = new URL("../src-tauri/icons/32x32.png", import.meta.url).pathname;
+  await picker.setInputFiles(iconFile);
+  const preview = form.getByRole("img", { name: "Screenshot to attach" });
+  await preview.waitFor();
+  await form.getByRole("button", { name: "Remove screenshot" }).click();
+  await preview.waitFor({ state: "detached" });
+  await picker.setInputFiles(iconFile);
+  await preview.waitFor();
+  await form.getByRole("button", { name: "Send report" }).click();
+  await form.getByText("Filed as #12").waitFor();
+  const withShot = sent.at(-1);
+  assert.equal(withShot.screenshot.type, "image/png");
+  assert.ok(withShot.screenshot.data.startsWith("iVBOR"), "a real PNG was sent");
   await page.keyboard.press("Escape");
   await form.waitFor({ state: "detached" });
 

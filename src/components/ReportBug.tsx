@@ -4,7 +4,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { useTabStore } from "../store/tabs";
 import { setOverlayActive } from "../lib/tabs";
 import { useMenuAction } from "../lib/menu";
-import { buildReport, fallbackIssueUrl, sendReport, type Setup } from "../lib/bug-report";
+import { buildReport, fallbackIssueUrl, prepareScreenshot, sendReport, type ScreenshotData, type Setup } from "../lib/bug-report";
 import { Icon } from "./Icon";
 import "./ReportBug.css";
 
@@ -28,6 +28,9 @@ function ReportForm({ onClose }: { onClose: () => void }) {
   const [includeSetup, setIncludeSetup] = useState(true);
   const [setup, setSetup] = useState<Setup | null>(null);
   const [status, setStatus] = useState<Status>({ kind: "editing" });
+  const [screenshot, setScreenshot] = useState<ScreenshotData | null>(null);
+  const [shotError, setShotError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -40,7 +43,17 @@ function ReportForm({ onClose }: { onClose: () => void }) {
   }, []);
 
   const report = () =>
-    buildReport({ happened, expected, contact, includeSetup: includeSetup && !!setup }, setup ?? { version: "", macos: "", chip: "" });
+    buildReport({ happened, expected, contact, includeSetup: includeSetup && !!setup }, setup ?? { version: "", macos: "", chip: "" }, screenshot);
+
+  async function attach(file: File | null | undefined) {
+    if (!file || !file.type.startsWith("image/")) return;
+    setShotError(null);
+    try {
+      setScreenshot(await prepareScreenshot(file));
+    } catch (cause) {
+      setShotError(cause instanceof Error ? cause.message : "Couldn't read that image.");
+    }
+  }
 
   async function send() {
     if (!happened.trim() || status.kind === "sending") return;
@@ -60,6 +73,13 @@ function ReportForm({ onClose }: { onClose: () => void }) {
       className="report"
       aria-labelledby="report-heading"
       onCancel={(e) => { e.preventDefault(); onClose(); }}
+      // ⌘V with a screenshot on the clipboard, or dropping an image file.
+      onPaste={(e) => {
+        const image = [...e.clipboardData.files].find((f) => f.type.startsWith("image/"));
+        if (image) { e.preventDefault(); void attach(image); }
+      }}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => { e.preventDefault(); void attach(e.dataTransfer.files[0]); }}
     >
       <header className="report-header">
         <h2 id="report-heading">Report a bug</h2>
@@ -93,6 +113,26 @@ function ReportForm({ onClose }: { onClose: () => void }) {
             <span>How can we reach you? <em>Optional</em></span>
             <input value={contact} maxLength={200} placeholder="GitHub username or email" onChange={(e) => setContact(e.target.value)} />
           </label>
+          <div className="report-shot">
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden
+              onChange={(e) => { void attach(e.target.files?.[0]); e.target.value = ""; }} />
+            {screenshot ? (
+              <>
+                <img className="report-thumb" alt="Screenshot to attach" src={`data:${screenshot.type};base64,${screenshot.data}`} />
+                <button type="button" className="report-button quiet" aria-label="Remove screenshot" onClick={() => setScreenshot(null)}>
+                  Remove
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="report-button" onClick={() => fileRef.current?.click()}>
+                  Attach a screenshot
+                </button>
+                <span className="report-help">Optional. You can also paste (⌘V) or drop one here.</span>
+              </>
+            )}
+          </div>
+          {shotError && <p className="report-help" role="alert">{shotError}</p>}
           <label className="report-check">
             <input type="checkbox" checked={includeSetup} disabled={!setup} onChange={(e) => setIncludeSetup(e.target.checked)} />
             <span>
@@ -101,11 +141,11 @@ function ReportForm({ onClose }: { onClose: () => void }) {
             </span>
           </label>
           <p className="report-help">
-            Reports become public GitHub issues. Nothing else is sent — not the page you're on, not your history.
+            Reports and screenshots become public GitHub issues. Nothing else is sent — not the page you're on, not your history.
           </p>
           {status.kind === "failed" && (
             <div className="report-error" role="alert">
-              <p>{status.error}</p>
+              <p>{status.error}{screenshot ? " Your screenshot can be dragged onto the GitHub page." : ""}</p>
               <button type="button" className="report-button" onClick={() => openAndClose(fallbackIssueUrl(report()))}>
                 Open on GitHub instead
               </button>

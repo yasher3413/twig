@@ -23,3 +23,5 @@
 .report-button.primary { border-color: color-mix(in srgb, var(--accent) 50%, transparent); background: var(--accent-tint); font-weight: 550; }
 .report-button.quiet { border-color: transparent; color: var(--text-muted); }
 .report-done-title { margin: 4px 0 0; font-size: 14px; font-weight: 550; }
+.report-shot { display: flex; align-items: center; gap: 10px; min-height: 34px; }
+.report-thumb { max-width: 120px; max-height: 72px; border: 1px solid var(--border); border-radius: 6px; object-fit: contain; background: var(--row-hover); }
