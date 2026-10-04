@@ -32,7 +32,9 @@ base64 = "0.22"
 codegen-units = 1
 lto = true
 opt-level = 3
-panic = "abort"
+# Not "abort": wry relies on catching Objective-C exceptions (opening a
+# sign-in pop-up throws one by design), and with panic=abort any exception
+# crossing Rust frames killed the whole app instead of being caught.
 strip = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
