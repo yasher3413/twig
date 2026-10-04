@@ -57,6 +57,14 @@ export function SettingsPanel() {
 
   useMenuAction(["settings"], togglePanel);
 
+  // Esc closes Settings, like every other panel.
+  useEffect(() => {
+    if (!panelOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closePanel(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [panelOpen, closePanel]);
+
   useEffect(() => {
     setOverlayActive(panelOpen, "settings");
     if (!panelOpen) return;

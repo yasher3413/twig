@@ -8,7 +8,7 @@
   justify-content: center;
   align-items: flex-start;
   padding-top: 13vh;
-  background: color-mix(in srgb, var(--strip) 62%, transparent);
+  background: color-mix(in srgb, var(--strip) 38%, transparent);
   animation: palette-fade 0.14s var(--ease);
 }
 

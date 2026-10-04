@@ -5,7 +5,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--strip) 62%, transparent);
+  background: color-mix(in srgb, var(--strip) 38%, transparent);
   animation: library-backdrop-in 0.16s var(--ease);
 }
 
