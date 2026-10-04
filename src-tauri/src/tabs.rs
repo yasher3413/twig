@@ -6,7 +6,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    webview::{Color, DownloadEvent, PageLoadEvent}, AppHandle, Emitter, EventTarget, LogicalPosition, LogicalSize, Manager,
+    webview::{Color, DownloadEvent, NewWindowFeatures, NewWindowResponse, PageLoadEvent}, AppHandle, Emitter, EventTarget, LogicalPosition, LogicalSize, Manager,
     Runtime, State, Theme, Webview, WebviewBuilder, WebviewUrl, WebviewWindowBuilder, Window,
     WindowEvent,
 };
@@ -749,6 +749,35 @@ fn spawn_webview_with_script<R: Runtime>(
                 emit_tabs_changed(&title_app, &label, inner);
             }
         });
+    // Pages asking for a new window: sign-in pop-ups become real windows tied
+    // to this page; plain new-window links become tabs. Without this, WebKit
+    // silently drops every one of them.
+    {
+        let popup_app = app.clone();
+        let popup_window = window.label().to_string();
+        builder = builder.on_new_window(move |url, features| match popup_kind(&url, features.size().is_some()) {
+            PopupKind::Refuse => NewWindowResponse::Deny,
+            PopupKind::Tab => {
+                let app = popup_app.clone();
+                let label = popup_window.clone();
+                let link = url.to_string();
+                let _ = popup_app.run_on_main_thread(move || {
+                    if let Some(window) = app.get_window(&label) {
+                        let _ = create_tab(app.clone(), window, app.state(), Some(link));
+                    }
+                });
+                NewWindowResponse::Deny
+            }
+            PopupKind::Window => match open_popup(&popup_app, features) {
+                Ok(window) => NewWindowResponse::Create { window },
+                Err(e) => {
+                    eprintln!("couldn't open a pop-up window: {e}");
+                    NewWindowResponse::Deny
+                }
+            },
+        });
+    }
+    builder = builder.initialization_script(POPUP_CLOSE);
     builder = builder.initialization_script(BUSY_TRACKER);
     builder = builder.initialization_script(LINK_HINTS);
     builder = builder.initialization_script(READER);
@@ -2047,6 +2076,74 @@ pub fn reload_tab<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), Strin
 }
 
 static PRIVATE_WINDOW_COUNTER: AtomicU64 = AtomicU64::new(0);
+static POPUP_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Debug, PartialEq, Eq)]
+enum PopupKind {
+    Tab,
+    Window,
+    Refuse,
+}
+
+/// What a page's request for a new window should become. A size means a
+/// pop-up the page will talk to (Google and Microsoft sign-in work this
+/// way) and an empty window is about to be scripted, so both need a real
+/// window that stays connected to the page. Anything else is a link that
+/// just wants somewhere new to open - a tab.
+fn popup_kind(url: &tauri::Url, has_size: bool) -> PopupKind {
+    match url.scheme() {
+        "http" | "https" if has_size => PopupKind::Window,
+        "http" | "https" => PopupKind::Tab,
+        "about" if url.as_str() == "about:blank" => PopupKind::Window,
+        _ => PopupKind::Refuse,
+    }
+}
+
+/// WebKit doesn't close a pop-up when its page calls `window.close()`, so
+/// pages opened by another page turn that call into a navigation twig can
+/// see. Harmless everywhere else: only script-opened windows have an opener.
+const POPUP_CLOSE: &str = r#"(() => {
+  if (!window.opener) return;
+  window.close = () => { location.href = 'twig-internal://close'; };
+})();"#;
+
+fn is_close_request(url: &str) -> bool {
+    url == "twig-internal://close"
+}
+
+/// A sign-in style pop-up: its own small window, sharing the opening page's
+/// session (macOS requires the opener's webview configuration, which
+/// `window_features` carries) so the page can hear back from it.
+fn open_popup<R: Runtime>(app: &AppHandle<R>, features: NewWindowFeatures) -> tauri::Result<tauri::WebviewWindow<R>> {
+    let label = format!("popup-{}", POPUP_COUNTER.fetch_add(1, Ordering::Relaxed) + 1);
+    let sized = features.size().is_some();
+    let closer = app.clone();
+    let closing = label.clone();
+    let mut builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::External("about:blank".parse().expect("valid url")))
+        .window_features(features)
+        .title("twig")
+        .user_agent(&USER_AGENT)
+        .on_document_title_changed(|window, title| {
+            let _ = window.set_title(&title);
+        })
+        .on_navigation(move |url| {
+            if !is_close_request(url.as_str()) {
+                return true;
+            }
+            let app = closer.clone();
+            let label = closing.clone();
+            std::thread::spawn(move || {
+                if let Some(window) = app.get_webview_window(&label) {
+                    let _ = window.close();
+                }
+            });
+            false
+        });
+    if !sized {
+        builder = builder.inner_size(520.0, 680.0);
+    }
+    builder.build()
+}
 
 /// Opens a new private window: a completely separate window with its own
 /// tabs/spaces, whose tab webviews use a non-persistent data store (no
@@ -2655,6 +2752,27 @@ mod snooze_tests {
     fn the_installed_safari_version_is_actually_read() {
         let version = super::installed_safari_version().expect("Safari's Info.plist should be readable");
         assert!(version.chars().next().is_some_and(|c| c.is_ascii_digit()), "got {version:?}");
+    }
+
+    #[test]
+    fn new_window_requests_become_tabs_or_real_popups() {
+        use super::{popup_kind, PopupKind};
+        let url = |u: &str| u.parse::<tauri::Url>().unwrap();
+        // A link with target=_blank, or window.open(url) with no size: a tab.
+        assert_eq!(popup_kind(&url("https://mail.google.com/x"), false), PopupKind::Tab);
+        // window.open(url, name, "width=500,height=600"): a sign-in window
+        // that has to stay connected to the page that opened it.
+        assert_eq!(popup_kind(&url("https://accounts.google.com/o/oauth2"), true), PopupKind::Window);
+        // window.open() then navigated by script: only a real window works.
+        assert_eq!(popup_kind(&url("about:blank"), false), PopupKind::Window);
+        // Nothing else (javascript:, file:, custom schemes) opens at all.
+        assert_eq!(popup_kind(&url("file:///etc/hosts"), false), PopupKind::Refuse);
+    }
+
+    #[test]
+    fn a_popup_asking_to_close_itself_is_recognised() {
+        assert!(super::is_close_request("twig-internal://close"));
+        assert!(!super::is_close_request("https://twig-internal.example/close"));
     }
 
     #[test]
