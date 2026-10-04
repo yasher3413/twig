@@ -96,6 +96,14 @@ export function setContentInset(right: number, owner: string): Promise<void> {
 
 const overlayOwners = new Set<string>();
 let overlayUpdate: Promise<void> = Promise.resolve();
+let pagesHidden = false;
+
+/** A picture of a page on screen, and where it sits in the window. */
+export interface PageSnapshot { x: number; y: number; width: number; height: number; image: string }
+
+function showSnapshots(snapshots: PageSnapshot[]) {
+  window.dispatchEvent(new CustomEvent("twig:page-snapshots", { detail: snapshots }));
+}
 
 export function setOverlayActive(open: boolean, owner: string): Promise<void> {
   if (open) overlayOwners.add(owner);
@@ -103,9 +111,17 @@ export function setOverlayActive(open: boolean, owner: string): Promise<void> {
   const active = overlayOwners.size > 0;
   // A closing palette must not reveal native pages over a checkpoint
   // browser it just opened. Preserve ordering across the native bridge.
-  overlayUpdate = overlayUpdate.catch(() => {}).then(() =>
-    invoke<void>("set_overlay_active", { open: active }),
-  );
+  overlayUpdate = overlayUpdate.catch(() => {}).then(async () => {
+    // Pages are native views above the interface, so an overlay has to hide
+    // them - but a picture taken first stands in for them, so whatever is
+    // open sits over your page instead of over an empty dark window.
+    if (active && !pagesHidden) {
+      showSnapshots(await invoke<PageSnapshot[]>("snapshot_visible_tabs").catch(() => []));
+    }
+    await invoke<void>("set_overlay_active", { open: active });
+    pagesHidden = active;
+    if (!active) showSnapshots([]);
+  });
   return overlayUpdate;
 }
 

@@ -165,6 +165,7 @@ pub fn run() {
             tabs::set_content_offset,
             tabs::set_content_inset,
             tabs::open_background_tab,
+            tabs::snapshot::snapshot_visible_tabs,
             default_browser::is_default_browser,
             about::system_info,
             default_browser::make_default_browser,

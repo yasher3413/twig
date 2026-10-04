@@ -4,7 +4,7 @@ import { useTabStore } from "../store/tabs";
 import { useSettingsStore } from "../store/settings";
 import { useChangeStore } from "../store/changes";
 import { shortDate } from "../lib/changes";
-import { goBack, goForward, isInternalUrl, reloadTab, setContentOffset } from "../lib/tabs";
+import { goBack, goForward, isInternalUrl, reloadTab, setOverlayActive } from "../lib/tabs";
 import {
   addBookmark,
   autocomplete,
@@ -222,29 +222,30 @@ export function AddressBar() {
     input.setSelectionRange(pending.start, pending.end);
   }, [draft]);
 
-  // Tab content is a separate native webview stacked above the chrome, so
-  // the dropdown needs room that isn't already spoken for. Rather than
-  // hiding the page, push it down by exactly the height of the list and
-  // draw into the gap - the page stays visible and keeps its scroll.
-  const panelHeight = suggestions.length ? suggestions.length * 32 + 10 + 6 : 0;
+  // Tab content is a native view stacked above the chrome, so the dropdown
+  // can't simply draw over it. Pushing the page down to make room shoved
+  // whole pages around as you typed (#5). Instead, while suggestions are
+  // showing, the page is swapped for a picture of itself and the list
+  // floats over that, the way it does in other browsers.
+  const showing = editing && suggestions.length > 0;
 
   useEffect(() => {
-    setContentOffset(editing ? panelHeight : 0);
-    overlayOn.current = panelHeight > 0;
-  }, [editing, panelHeight]);
+    if (showing === overlayOn.current) return;
+    overlayOn.current = showing;
+    setOverlayActive(showing, "omnibox").catch(() => {});
+  }, [showing]);
 
   // Covers unmount and tab switches, where no blur event arrives.
   useEffect(() => {
     return () => {
-      if (overlayOn.current) setContentOffset(0);
+      if (overlayOn.current) setOverlayActive(false, "omnibox").catch(() => {});
     };
   }, []);
 
   function releaseOverlay() {
-    if (overlayOn.current) {
-      overlayOn.current = false;
-    }
-    setContentOffset(0);
+    if (!overlayOn.current) return;
+    overlayOn.current = false;
+    setOverlayActive(false, "omnibox").catch(() => {});
   }
 
   function commit(value?: string) {

@@ -12,13 +12,17 @@ const { outputText } = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 });
 
-function bridge(invoke) {
+function bridge(invoke, events = []) {
   const exports = {};
   runInNewContext(outputText, {
     exports,
+    window: { dispatchEvent: (e) => events.push(e) },
+    CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init?.detail; } },
     require(name) {
       assert.equal(name, "@tauri-apps/api/core");
-      return { invoke };
+      // Snapshots are their own concern (tested below); these tests are
+      // about the show/hide calls.
+      return { invoke: (command, args) => command === "snapshot_visible_tabs" ? Promise.resolve([]) : invoke(command, args) };
     },
   });
   return exports.setOverlayActive;
@@ -95,4 +99,33 @@ test("a side panel handing over to another keeps the page narrowed", async () =>
   assert.equal(insets.at(-1), 380, "the old panel's release must not undo the new panel's claim");
   await exports.setContentInset(0, "sweep");
   assert.equal(insets.at(-1), 0);
+});
+
+test("the page is pictured before it is hidden, and the picture goes once it is back", async () => {
+  const calls = [];
+  const events = [];
+  const exports = {};
+  const shot = { x: 0, y: 84, width: 800, height: 600, image: "data:image/jpeg;base64,/9j/" };
+  runInNewContext(outputText, {
+    exports,
+    window: { dispatchEvent: (e) => { events.push(e); calls.push(`event:${e.detail.length}`); } },
+    CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init?.detail; } },
+    require() {
+      return { invoke: async (command, args) => {
+        calls.push(command === "set_overlay_active" ? `overlay:${args.open}` : command);
+        return command === "snapshot_visible_tabs" ? [shot] : undefined;
+      } };
+    },
+  });
+  await exports.setOverlayActive(true, "settings");
+  await exports.setOverlayActive(true, "palette");
+  await exports.setOverlayActive(false, "palette");
+  await exports.setOverlayActive(false, "settings");
+  assert.deepEqual(calls, [
+    "snapshot_visible_tabs", "event:1", "overlay:true",
+    "overlay:true",
+    "overlay:true",
+    "overlay:false", "event:0",
+  ]);
+  assert.equal(events[0].type, "twig:page-snapshots");
 });

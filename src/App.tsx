@@ -18,6 +18,7 @@ import { Changes } from "./components/Changes";
 import { SnoozePicker } from "./components/SnoozePicker";
 import { SweepPanel } from "./components/SweepPanel";
 import { ReportBug } from "./components/ReportBug";
+import { PageSnapshots } from "./components/PageSnapshots";
 import type { RecallCapture } from "./lib/recall-db";
 import { useTabStore } from "./store/tabs";
 import { useSettingsStore } from "./store/settings";
@@ -150,6 +151,7 @@ function App() {
 
   return (
     <>
+      <PageSnapshots />
       <TabStrip />
       <AddressBar />
       {showNewTab && <NewTabPage />}

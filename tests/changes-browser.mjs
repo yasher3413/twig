@@ -74,6 +74,7 @@ await page.addInitScript((pageUrl) => {
       if (command === "get_keymap") return [];
       if (command === "is_default_browser") return window.testIsDefault === true;
       if (command === "system_info") return { macos: "26.2", chip: "Apple M3" };
+      if (command === "snapshot_visible_tabs") return [{ x: 0, y: 84, width: 1200, height: 716, image: "data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==" }];
       if (command === "plugin:app|version") return "0.1.1";
       if (command === "make_default_browser") { window.testIsDefault = true; return null; }
       if (command === "memory_stats") return { footprintKb: 0, processCount: 0, awakeTabs: 0, sleepingTabs: 0, estimatedSavedKb: 0 };
@@ -110,6 +111,17 @@ try {
   assert.match(await icon.getAttribute("src"), /domain=docs\.example\.com/);
   assert.equal(await page.locator(".tab", { hasText: "Other" }).locator("img.site-mark").count(), 1);
 
+  // Overlays sit over a picture of the page instead of an empty window (#6),
+  // and the address bar's suggestions float over it instead of pushing the
+  // page down (#5).
+  const snapshot = page.locator("img.page-snapshot");
+  await page.evaluate(() => window.fireEvent("menu-action", "settings"));
+  await snapshot.waitFor();
+  assert.deepEqual(await snapshot.evaluate((el) => { const r = el.getBoundingClientRect(); return [r.top, r.left, r.width, r.height]; }), [84, 0, 1200, 716]);
+  await page.keyboard.press("Escape");
+  await snapshot.waitFor({ state: "detached" });
+  const offsetsBefore = await page.evaluate(() => window.calls.filter((c) => c.command === "set_content_offset" && c.args.offset > 0).length);
+
   // The address bar: the first click selects the whole address, so typing
   // replaces it; autofill completes to a site, never an old search.
   for (let i = 0; i < 5; i++) db.prepare("INSERT INTO history (url, title, visited_at) VALUES (?, ?, ?)").run("https://www.google.com/search?q=weather", "weather - Google Search", Date.now());
@@ -127,7 +139,10 @@ try {
   await box.fill("");
   await box.pressSequentially("gi", { delay: 40 });
   await eventually(async () => (await box.inputValue()) === "github.com", "autofill to github.com");
+  await snapshot.waitFor();
+  assert.equal(await page.evaluate(() => window.calls.filter((c) => c.command === "set_content_offset" && c.args.offset > 0).length), offsetsBefore, "suggestions must not push the page down");
   await box.press("Escape");
+  await snapshot.waitFor({ state: "detached" });
 
   // Revisit with changed text: chip appears, and the capture is still indexed.
   await captureNow(newBody);
