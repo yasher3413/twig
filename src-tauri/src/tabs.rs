@@ -791,6 +791,7 @@ fn spawn_webview_with_script<R: Runtime>(
     }
     builder = builder.initialization_script(POPUP_CLOSE);
     builder = builder.initialization_script(FRAME_COLORS);
+    builder = builder.initialization_script(NEW_WINDOW_LINKS);
     builder = builder.initialization_script(BUSY_TRACKER);
     builder = builder.initialization_script(LINK_HINTS);
     builder = builder.initialization_script(READER);
@@ -2187,6 +2188,7 @@ fn popup_kind(url: &tauri::Url, has_size: bool) -> PopupKind {
 /// pages opened by another page turn that call into a navigation twig can
 /// see. Harmless everywhere else: only script-opened windows have an opener.
 const FRAME_COLORS: &str = include_str!("tabs/frames.js");
+const NEW_WINDOW_LINKS: &str = include_str!("tabs/new_window_links.js");
 
 const POPUP_CLOSE: &str = r#"(() => {
   if (!window.opener) return;
