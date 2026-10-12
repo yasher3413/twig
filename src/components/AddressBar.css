@@ -120,6 +120,12 @@
   outline: none;
 }
 
+/* The faint page-wide tint hid inline completions; this one has to read as
+   "selected, typing replaces it". */
+.omnibox-input::selection {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
 .omnibox-input::placeholder {
   color: var(--text-muted);
 }

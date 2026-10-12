@@ -139,6 +139,13 @@ try {
   await box.fill("");
   await box.pressSequentially("gi", { delay: 40 });
   await eventually(async () => (await box.inputValue()) === "github.com", "autofill to github.com");
+  // The top row names the completion Enter will take, not a search for "gi";
+  // backspacing over the completion brings the search back.
+  const topRow = () => page.locator(".suggestion").first().locator(".suggestion-label").textContent();
+  await eventually(async () => (await topRow()) === "github.com", "top row offers the completion");
+  await box.press("Backspace");
+  await eventually(async () => (await box.inputValue()) === "gi" && (await topRow()) === "gi", "backspace drops the completion");
+  assert.match(await page.locator(".suggestion").first().textContent(), /Search Google/);
   await snapshot.waitFor();
   assert.equal(await page.evaluate(() => window.calls.filter((c) => c.command === "set_content_offset" && c.args.offset > 0).length), offsetsBefore, "suggestions must not push the page down");
   await box.press("Escape");

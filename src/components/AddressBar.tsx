@@ -260,6 +260,13 @@ export function AddressBar() {
 
   const secure = url.startsWith("https://");
 
+  // While a completion is showing, Enter goes to it, so the top row says so
+  // instead of offering the search or address you only partly typed.
+  const completing = draft !== typed && suggestions[0]?.kind === "search";
+  const rows = completing
+    ? [{ key: "completion", kind: "search" as const, label: draft, detail: "Go to site", target: draft }, ...suggestions.slice(1)]
+    : suggestions;
+
   return (
     <div
       className="address-bar"
@@ -392,9 +399,9 @@ export function AddressBar() {
           </button>
         )}
 
-        {editing && suggestions.length > 0 && (
+        {editing && rows.length > 0 && (
           <ul className="omnibox-suggestions">
-            {suggestions.map((s, i) => (
+            {rows.map((s, i) => (
               <li
                 key={s.key}
                 className={i === highlighted ? "suggestion active" : "suggestion"}
@@ -406,7 +413,7 @@ export function AddressBar() {
                 }}
               >
                 <Icon
-                  name={s.kind === "search" ? "search" : s.kind === "bookmark" ? "star" : "history"}
+                  name={s.key === "completion" ? "globe" : s.kind === "search" ? "search" : s.kind === "bookmark" ? "star" : "history"}
                   size={14}
                 />
                 <span className="suggestion-label">{s.label}</span>
