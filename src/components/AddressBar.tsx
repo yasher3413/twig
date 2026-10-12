@@ -279,7 +279,8 @@ export function AddressBar() {
         <button
           className="nav-button"
           title="Back"
-          disabled={!activeTab}
+          aria-label="Back"
+          disabled={!activeTab?.canGoBack}
           onClick={() => activeId && goBack(activeId)}
         >
           <Icon name="back" />
@@ -287,7 +288,8 @@ export function AddressBar() {
         <button
           className="nav-button"
           title="Forward"
-          disabled={!activeTab}
+          aria-label="Forward"
+          disabled={!activeTab?.canGoForward}
           onClick={() => activeId && goForward(activeId)}
         >
           <Icon name="forward" />

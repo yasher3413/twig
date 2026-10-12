@@ -190,6 +190,8 @@ mod tests {
             status: TabStatus::Hot,
             last_active_at: Instant::now(),
             last_used_ms: 0,
+            can_go_back: false,
+            can_go_forward: false,
             scroll_y: 0.0,
             group_id: "other".into(),
         });

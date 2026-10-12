@@ -612,6 +612,8 @@ fn append_package(inner: &mut Inner, package: &ResearchPackage) -> Result<String
             status: TabStatus::Hibernated,
             last_active_at: Instant::now(),
             last_used_ms: super::wall_ms(),
+            can_go_back: false,
+            can_go_forward: false,
             scroll_y: 0.0,
             group_id: group_id.clone(),
         });
@@ -919,6 +921,8 @@ mod tests {
             status: TabStatus::Hot,
             last_active_at: Instant::now(),
             last_used_ms: 0,
+            can_go_back: false,
+            can_go_forward: false,
             scroll_y: 42.0,
             group_id: "1".into(),
         });

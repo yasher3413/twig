@@ -10,6 +10,9 @@ export interface Tab {
   groupId: string;
   /** Wall-clock ms the tab was last on screen. Survives restarts. */
   lastUsedAt: number;
+  /** Whether the page's own history allows Back / Forward right now. */
+  canGoBack?: boolean;
+  canGoForward?: boolean;
 }
 
 export interface Group {

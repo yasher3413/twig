@@ -330,6 +330,8 @@ fn append_restored(
             status: TabStatus::Hibernated,
             last_active_at: Instant::now(),
             last_used_ms: super::wall_ms(),
+            can_go_back: false,
+            can_go_forward: false,
             group_id: group_id.clone(),
         });
     }
@@ -447,6 +449,8 @@ mod tests {
                 group_id: group.into(),
                 last_active_at: Instant::now(),
                 last_used_ms: 0,
+                can_go_back: false,
+                can_go_forward: false,
             });
         }
         inner.active_group_mut().active_id = Some("4100".into());

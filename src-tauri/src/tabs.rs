@@ -352,6 +352,8 @@ pub struct TabInfo {
     pub status: TabStatus,
     pub group_id: String,
     pub last_used_at: u64,
+    pub can_go_back: bool,
+    pub can_go_forward: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -439,6 +441,10 @@ struct TabEntry {
     last_active_at: Instant,
     /// Wall-clock ms this tab was last on screen, persisted for the sweep.
     last_used_ms: u64,
+    /// What WebKit says this tab's own history allows, so the toolbar can
+    /// grey out Back and Forward when there's nowhere to go.
+    can_go_back: bool,
+    can_go_forward: bool,
     /// Scroll offset captured right before hibernating, restored on wake.
     scroll_y: f64,
     group_id: String,
@@ -453,6 +459,8 @@ impl TabEntry {
             status: self.status,
             group_id: self.group_id.clone(),
             last_used_at: self.last_used_ms,
+            can_go_back: self.can_go_back,
+            can_go_forward: self.can_go_forward,
         }
     }
 }
@@ -727,7 +735,10 @@ fn spawn_webview_with_script<R: Runtime>(
         .incognito(incognito)
         .user_agent(&USER_AGENT)
         .background_color(backdrop)
-        .on_document_title_changed(move |_webview, title| {
+        .on_document_title_changed(move |webview, title| {
+            // Single-page sites often change page without a load, but nearly
+            // always change the title: a good moment to recheck history.
+            refresh_history(&title_app, &title_id, &webview);
             // The page's own name for itself - "Leafs – Google Search",
             // "GitHub" - including titles single-page apps change later.
             let Some(title) = display_title(&title) else { return };
@@ -851,6 +862,7 @@ fn spawn_webview_with_script<R: Runtime>(
                     }
                 }
             }
+            refresh_history(&hooked, &capture_id, &webview);
             if payload.event() != PageLoadEvent::Finished {
                 return;
             }
@@ -1216,6 +1228,8 @@ fn open_tab_with_script<R: Runtime>(
         status: TabStatus::Hot,
         last_active_at: Instant::now(),
         last_used_ms: wall_ms(),
+        can_go_back: false,
+        can_go_forward: false,
         scroll_y: 0.0,
         group_id,
     });
@@ -1340,6 +1354,8 @@ pub fn open_background_tab<R: Runtime>(
         status: TabStatus::Hibernated,
         last_active_at: Instant::now(),
         last_used_ms: wall_ms(),
+        can_go_back: false,
+        can_go_forward: false,
         scroll_y: 0.0,
         group_id,
     });
@@ -1648,6 +1664,46 @@ fn follow_page(entry: &mut TabEntry, url: &str) -> bool {
         entry.title = derive_title(&parsed);
     }
     true
+}
+
+/// Asks WebKit whether this tab can go back or forward, and tells the
+/// toolbar when that changes - so Back and Forward grey out when there's
+/// nowhere to go (#9). Queued onto the main thread, never run under the
+/// tab-state lock.
+fn refresh_history<R: Runtime>(app: &AppHandle<R>, tab_id: &str, webview: &Webview<R>) {
+    let app = app.clone();
+    let tab_id = tab_id.to_string();
+    let _ = webview.with_webview(move |platform| {
+        #[cfg(target_os = "macos")]
+        let (back, forward) = {
+            let page = unsafe { &*platform.inner().cast::<objc2_web_kit::WKWebView>() };
+            unsafe { (page.canGoBack(), page.canGoForward()) }
+        };
+        #[cfg(not(target_os = "macos"))]
+        let (back, forward) = {
+            let _ = platform;
+            (false, false)
+        };
+        let manager = app.state::<TabManager>();
+        let mut managers = manager.0.lock().unwrap();
+        let Some(label) = managers
+            .iter()
+            .find(|(_, inner)| inner.tabs.iter().any(|t| t.id == tab_id))
+            .map(|(label, _)| label.clone())
+        else {
+            return;
+        };
+        if let Some(inner) = managers.get_mut(&label) {
+            if let Some(entry) = inner.tabs.iter_mut().find(|t| t.id == tab_id) {
+                if entry.can_go_back == back && entry.can_go_forward == forward {
+                    return;
+                }
+                entry.can_go_back = back;
+                entry.can_go_forward = forward;
+            }
+            emit_tabs_changed(&app, &label, inner);
+        }
+    });
 }
 
 /// A page's `<title>` as a tab name: whitespace collapsed, capped, and
@@ -2533,6 +2589,8 @@ pub fn restore_session<R: Runtime>(app: &AppHandle<R>, window: &Window<R>) {
             status: TabStatus::Hibernated,
             last_active_at: Instant::now(),
             last_used_ms: t.last_used_ms.unwrap_or_else(wall_ms),
+            can_go_back: false,
+            can_go_forward: false,
             scroll_y: t.scroll_y,
             group_id: t.group_id,
         })
@@ -2689,7 +2747,7 @@ mod snooze_tests {
         let mut inner = super::Inner::default();
         let tab = |url: &str| super::TabEntry {
             id: "1".into(), url: url.into(), title: "T".into(), status: super::TabStatus::Hot,
-            last_active_at: std::time::Instant::now(), last_used_ms: 0, scroll_y: 0.0, group_id: "1".into(),
+            last_active_at: std::time::Instant::now(), last_used_ms: 0, can_go_back: false, can_go_forward: false, scroll_y: 0.0, group_id: "1".into(),
         };
         super::remember_closed(&mut inner, tab("https://closed.example/"), true);
         super::remember_closed(&mut inner, tab("https://snoozed.example/"), false);
@@ -2716,7 +2774,7 @@ mod snooze_tests {
         let mut inner = super::Inner::default();
         let tab = |id: &str, url: &str| super::TabEntry {
             id: id.into(), url: url.into(), title: "T".into(), status: super::TabStatus::Hot,
-            last_active_at: std::time::Instant::now(), last_used_ms: 0, scroll_y: 0.0, group_id: "1".into(),
+            last_active_at: std::time::Instant::now(), last_used_ms: 0, can_go_back: false, can_go_forward: false, scroll_y: 0.0, group_id: "1".into(),
         };
         inner.tabs.push(tab("1", "https://a.example/"));
         inner.tabs.push(tab("2", ""));
@@ -2730,7 +2788,7 @@ mod snooze_tests {
     fn a_new_page_takes_over_the_tab_but_the_same_page_keeps_its_title() {
         let mut entry = super::TabEntry {
             id: "1".into(), url: "https://github.com/".into(), title: "GitHub".into(), status: super::TabStatus::Hot,
-            last_active_at: std::time::Instant::now(), last_used_ms: 0, scroll_y: 0.0, group_id: "1".into(),
+            last_active_at: std::time::Instant::now(), last_used_ms: 0, can_go_back: false, can_go_forward: false, scroll_y: 0.0, group_id: "1".into(),
         };
         assert!(!super::follow_page(&mut entry, "https://github.com/"));
         assert_eq!(entry.title, "GitHub");
