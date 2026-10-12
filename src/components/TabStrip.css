@@ -45,6 +45,8 @@
    toolbar below so the two read as a single continuous plane. */
 .tab {
   position: relative;
+  /* Each tab adapts to its own width (see the @container rules below). */
+  container-type: inline-size;
   flex: 1 1 190px;
   min-width: 52px;
   max-width: 220px;
@@ -249,3 +251,26 @@
 .sweep-pill { flex-shrink: 0; align-self: center; height: 24px; margin-right: 6px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--accent-tint); color: var(--text); font: inherit; font-size: 11.5px; font-weight: 550; white-space: nowrap; cursor: default; transition: background-color 160ms var(--ease); }
 .sweep-pill:hover { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
 .sweep-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* A crowded strip (#10): narrow tabs keep only what fits. The split and
+   snooze buttons stay reachable by shortcut (⌥/⌘-click, ⌥⌘S) and ⌘K. */
+@container (max-width: 159px) {
+  .tab .tab-split,
+  .tab .tab-snooze,
+  .tab:hover .tab-split,
+  .tab:hover .tab-snooze,
+  .tab.active .tab-split,
+  .tab.active .tab-snooze {
+    display: none;
+  }
+}
+
+/* The tiniest tabs are just their icon - plus close on the active one. */
+@container (max-width: 89px) {
+  .tab-title {
+    display: none;
+  }
+  .tab-icon {
+    margin-inline: auto;
+  }
+}

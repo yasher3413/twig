@@ -30,7 +30,7 @@ db.prepare("INSERT INTO snoozed (url, title, space_id, space_name, wake_at, snoo
   .run("https://broken.example/", "Broken", now - 60_000, now - DAY);
 
 const browser = await webkit.launch();
-const context = await browser.newContext({ viewport: { width: 1200, height: 800 }, colorScheme: "light", deviceScaleFactor: 2 });
+const context = await browser.newContext({ viewport: { width: 1600, height: 900 }, colorScheme: "light", deviceScaleFactor: 2 });
 const page = await context.newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));

@@ -233,6 +233,44 @@ try {
   await makeDefault.click();
   await page.getByText("twig is your default browser").waitFor();
 
+  // #9: back and forward are only clickable when the page can go that way.
+  const back = page.getByRole("button", { name: "Back" });
+  const forward = page.getByRole("button", { name: "Forward" });
+  const setHistory = (canGoBack, canGoForward) => page.evaluate(([b, f]) => {
+    const tab = window.testState.tabs.find((t) => t.id === window.testState.activeId);
+    tab.canGoBack = b; tab.canGoForward = f;
+    window.fireEvent("tabs-changed", structuredClone(window.testState));
+  }, [canGoBack, canGoForward]);
+  await setHistory(false, false);
+  await eventually(async () => (await back.isDisabled()) && (await forward.isDisabled()), "both greyed out with no history");
+  await setHistory(true, false);
+  await eventually(async () => !(await back.isDisabled()) && (await forward.isDisabled()), "back on, forward off");
+
+  // #10: a crowded strip. Narrow tabs keep only what fits: no split or
+  // snooze buttons crammed beside the title, and the tiniest show just the icon.
+  await page.evaluate(() => {
+    for (let i = 0; i < 7; i++) window.testState.tabs.push({ id: `c${i}`, url: `https://site${i}.example/`, title: `Crowded tab number ${i}`, status: "hot", groupId: "1", lastUsedAt: Date.now() });
+    window.testState.activeId = "c0";
+    window.fireEvent("tabs-changed", structuredClone(window.testState));
+  });
+  const crowded = page.locator(".tab", { hasText: "Crowded tab number 0" });
+  await crowded.waitFor();
+  const visibleActions = () => crowded.locator(".tab-action").evaluateAll((els) => els.filter((el) => getComputedStyle(el).display !== "none" && el.getBoundingClientRect().width > 0).length);
+  const width = await crowded.evaluate((el) => el.getBoundingClientRect().width);
+  assert.ok(width >= 90 && width < 160, `a middling tab, got ${width}px`);
+  assert.ok((await visibleActions()) <= 1, `a narrow tab shows at most its close button, saw ${await visibleActions()}`);
+  assert.notEqual(await crowded.locator(".tab-title").evaluate((el) => getComputedStyle(el).display), "none", "a middling tab keeps its title");
+  await page.evaluate(() => {
+    for (let i = 7; i < 40; i++) window.testState.tabs.push({ id: `c${i}`, url: `https://site${i}.example/`, title: `Crowded tab number ${i}`, status: "hot", groupId: "1", lastUsedAt: Date.now() });
+    window.fireEvent("tabs-changed", structuredClone(window.testState));
+  });
+  await eventually(async () => (await crowded.locator(".tab-title").evaluate((el) => getComputedStyle(el).display)) === "none", "the tiniest tabs drop the title");
+  await page.evaluate(() => {
+    window.testState.tabs = window.testState.tabs.filter((t) => !t.id.startsWith("c"));
+    window.testState.activeId = "1";
+    window.fireEvent("tabs-changed", structuredClone(window.testState));
+  });
+
   // Report a bug: a native form that files the issue through the relay.
   await page.keyboard.press("Escape");
   const sent = [];
