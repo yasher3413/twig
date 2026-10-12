@@ -1633,10 +1633,36 @@ pub fn set_search_engine(template: String) {
 /// real URL: a bare host like "example.com" gets `https://` added, and
 /// anything that doesn't look like a URL at all (e.g. "rust borrow checker")
 /// becomes a search instead of failing to parse.
+/// Whether typed text points at this Mac or the local network - a dev
+/// server on localhost:3000, a router at 192.168.1.1, printer.local. Those
+/// are almost never https, and "localhost:3000" must never become a search.
+fn is_local_address(input: &str) -> bool {
+    let authority = input.split(['/', '?', '#']).next().unwrap_or("");
+    let host = if let Some(rest) = authority.strip_prefix('[') {
+        rest.split(']').next().unwrap_or("")
+    } else {
+        match authority.rsplit_once(':') {
+            Some((host, port)) if !port.is_empty() && port.chars().all(|c| c.is_ascii_digit()) => host,
+            _ => authority,
+        }
+    };
+    let host = host.to_ascii_lowercase();
+    host == "localhost"
+        || host.ends_with(".localhost")
+        || host.ends_with(".local")
+        || host
+            .parse::<std::net::Ipv4Addr>()
+            .is_ok_and(|ip| ip.is_loopback() || ip.is_private() || ip.is_link_local())
+        || host.parse::<std::net::Ipv6Addr>().is_ok_and(|ip| ip.is_loopback())
+}
+
 fn normalize_url(input: &str) -> String {
     let trimmed = input.trim();
     if trimmed.contains("://") {
         return trimmed.to_string();
+    }
+    if !trimmed.contains(' ') && is_local_address(trimmed) {
+        return format!("http://{trimmed}");
     }
     let looks_like_url = !trimmed.contains(' ') && trimmed.contains('.');
     if looks_like_url {
@@ -2835,6 +2861,23 @@ mod snooze_tests {
     fn a_popup_asking_to_close_itself_is_recognised() {
         assert!(super::is_close_request("twig-internal://close"));
         assert!(!super::is_close_request("https://twig-internal.example/close"));
+    }
+
+    #[test]
+    fn local_addresses_open_over_http_and_are_never_searched() {
+        use super::normalize_url;
+        assert_eq!(normalize_url("localhost:3000"), "http://localhost:3000");
+        assert_eq!(normalize_url("localhost"), "http://localhost");
+        assert_eq!(normalize_url("127.0.0.1:8765/page2.html"), "http://127.0.0.1:8765/page2.html");
+        assert_eq!(normalize_url("192.168.1.10"), "http://192.168.1.10");
+        assert_eq!(normalize_url("10.0.0.5:8080"), "http://10.0.0.5:8080");
+        assert_eq!(normalize_url("printer.local"), "http://printer.local");
+        assert_eq!(normalize_url("[::1]:4000"), "http://[::1]:4000");
+        // The public web still defaults to https, and searches stay searches.
+        assert_eq!(normalize_url("github.com/yasher3413"), "https://github.com/yasher3413");
+        assert!(normalize_url("local news").contains("q=local+news"));
+        assert!(normalize_url("localhost tips").contains("q=localhost+tips"));
+        assert_eq!(normalize_url("http://example.com"), "http://example.com");
     }
 
     #[test]
